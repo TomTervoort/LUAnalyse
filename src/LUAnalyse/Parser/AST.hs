@@ -9,7 +9,7 @@ type AST = Block
 data Block = StatList [Statement]
               deriving (Typeable, Data, Show)
 
-data Statement = AssignmentStatement {lhs :: [Expr], rhs :: [Expr]}
+data Statement = AssignmentStatement {lhs :: [Expr], rhs :: [Expr]} 
                | CallStatement {exp :: Expr}
                | LocalStatement {locals :: [Name],  inits :: [Expr]}
                | IfStatement {condition :: Expr, thenBody ::  Block, elseBody :: Maybe Block}
@@ -24,7 +24,7 @@ data Statement = AssignmentStatement {lhs :: [Expr], rhs :: [Expr]}
                   deriving (Typeable, Data, Show)
 
 data Expr = VarExpr Name
-          | NumberExpr Double
+          | NumberExpr Double   
           | StringExpr String
           | BooleanExpr Bool
           | NilExpr

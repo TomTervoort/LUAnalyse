@@ -25,10 +25,12 @@ splitCtorString ('(':cs) = ("", splitArgs 0 False $ init cs)
         splitArgs p False (')':cs) = ')'  `ins` splitArgs (p - 1) False cs
         splitArgs p q ('\'':cs)    = '\'' `ins` splitArgs p (not q) cs
         splitArgs p q ( c :cs)     =  c   `ins` splitArgs p q cs
+        splitArgs _ _ _ = error "Parse error in serialised AST."
 
         ins x []     = [[x]]
         ins x (y:ys) = (x:y) : ys
 splitCtorString ( c :cs) = first (c:) $ splitCtorString cs
+splitCtorString _ = error "Parse error in serialised AST."
 
 getConstrByName :: String -> DataType -> Maybe Constr
 getConstrByName name ty = fmap (indexConstr ty . (+1)) 
