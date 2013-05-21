@@ -4,7 +4,7 @@
 --   datatype.
 --
 --   NOTE: make sure lua 5.1 (not >= 5.2!) is installed and executable through the command 'lua'.
-module LUAnalyse.Parser (parseLuaFile) where
+module LUAnalyse.Parser.Parser (parseLuaFile) where
 
 import LUAnalyse.Parser.AST
 import LUAnalyse.Parser.Deserialise
