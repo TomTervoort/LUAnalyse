@@ -148,7 +148,7 @@ handleStatement = function(stat)
 	local args
 
 	if stat.AstType == 'AssignmentStatement' then
-		args = {lhs = stat.Lhs, rhs = handleExprList(stat.Rhs)}
+		args = {handleExprList(stat.Lhs), handleExprList(stat.Rhs)}
 
 	elseif stat.AstType == 'CallStatement' then
 		args = {exp = handleExpr(stat.Expression)}
@@ -218,13 +218,13 @@ handleBlock = function(statList)
 		table.insert(stats, handleStatement(stat))
 	end
 
-	return {ctor =  'StatList', args = {{ctor = 'List', args = stats}}}
+	return {ctor = 'StatList', args = {{ctor = 'List', args = stats}}}
 end
 
 
 -- Stringifies a formatted AST.
 stringify = function(root)
-	-- dump(root)
+	--dump(root)
 	if type(root) == 'string' then
 		return root
 	elseif type(root) == 'number' then
@@ -232,14 +232,19 @@ stringify = function(root)
 	elseif type(root) == 'table' then
 		local argStr = '('
 		local first = true
-		for k,v in pairs(root.args) do
-			if not first then argStr = argStr .. ',' end
-			first = false
-			argStr = argStr .. stringify(root.args[k])
-		end
-		argStr = argStr .. ')'
+		
+		if root.args == nil then
+		    return 'nil'
+		else
+		    for k,v in pairs(root.args) do
+			    if not first then argStr = argStr .. ',' end
+			    first = false
+			    argStr = argStr .. stringify(root.args[k])
+		    end
+		    argStr = argStr .. ')'
 
-		return root.ctor .. argStr
+		    return root.ctor .. argStr
+		end
 	else
 		error('Invalid AST type.')
 	end
@@ -247,5 +252,5 @@ end
 
 -- Do the actual serialisation on the AST and print the result to stdout.
 local formatted = handleBlock(ast)
--- dump(formatted)
+
 print(stringify(formatted))

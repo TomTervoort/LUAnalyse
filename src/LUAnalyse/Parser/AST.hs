@@ -9,9 +9,9 @@ type AST = Block
 data Block = StatList [Statement]
               deriving (Typeable, Data, Show)
 
-data Statement = AssignmentStatement {lhs :: [Expr], rhs :: [Expr]} 
-               | CallStatement {exp :: Expr} -- TODO: How is call a statement? It is an expression.
-               | LocalStatement {locals :: [Name],  inits :: [Expr]}
+data Statement = AssignmentStatement {lhs :: [Expr], rhs :: [Expr]}
+               | CallStatement {expr :: Expr} -- TODO: How is call a statement? It is an expression.
+               | LocalStatement {locals :: [Name], inits :: [Expr]}
                | IfStatement {condition :: Expr, thenBody ::  Block, elseBody :: Maybe Block}
                | WhileStatement {condition :: Expr, body :: Block}
                | DoStatement {body :: Block}
@@ -24,7 +24,7 @@ data Statement = AssignmentStatement {lhs :: [Expr], rhs :: [Expr]}
                   deriving (Typeable, Data, Show)
 
 data Expr = VarExpr Name
-          | NumberExpr Double   
+          | NumberExpr Double
           | StringExpr String
           | BooleanExpr Bool
           | NilExpr
