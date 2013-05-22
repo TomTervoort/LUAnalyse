@@ -7,6 +7,16 @@ while a <= 10 do
     a = a + 1
 end
 
+-- Repeat loop
+a = 0
+repeat
+    a = a + 1
+    
+    if a * a >= 4 then
+        break
+    end
+until a >= 10
+
 -- Simple assignments.
 a,b,c = "abc",nil,12.2
 
@@ -15,6 +25,7 @@ a[b] = 10
 a.b.c = 10
 
 -- false does not work
+-- "abc" --> "\"abc\""
 
 -- If.
 if a then
@@ -38,3 +49,8 @@ else
 end
 
 -- elseif...
+
+do
+    return 1
+end
+

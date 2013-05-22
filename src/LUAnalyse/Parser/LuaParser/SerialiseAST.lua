@@ -164,9 +164,9 @@ handleStatement = function(stat)
 		args = {handleNameList(stat.LocalList), handleExprList(stat.InitList)}
 
 	elseif stat.AstType == 'IfStatement' then
-		args = {handleExpr(stat.Clauses[1].Condition), -- second
-				handleBlock(stat.Clauses[1].Body), -- third
-				nothing()} -- first
+		args = {handleExpr(stat.Clauses[1].Condition),
+				handleBlock(stat.Clauses[1].Body),
+				nothing()}
 
 		if #stat.Clauses == 2  and not stat.Clauses[2].Condition then
 			args[3] = just(handleBlock(stat.Clauses[2].Body))

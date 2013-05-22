@@ -24,7 +24,7 @@ data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
                  | MemberInstr {var :: Variable, value :: Variable, member :: Name} -- a = b.name
                  | IndexInstr {var :: Variable, value :: Variable, index :: Variable} -- a = b[c]
                  | NewMemberInstr {var :: Variable, member :: Name, value :: Variable} -- a.name = b
-                 | NewIndexInstr {var :: Variable, index :: Variable, value :: Variable} -- a[name] = b
+                 | NewIndexInstr {var :: Variable, index :: Variable, value :: Variable} -- a[b] = c
                  
                  -- Arithmetic operators.
                  | AddInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b + c
@@ -50,7 +50,7 @@ data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
 -- Flow instructions.
 data FlowInstruction = JumpInstr {target :: BlockReference} -- goto block
                      | CondJumpInstr {target :: BlockReference, alternative :: BlockReference, cond :: Variable} -- if (a) { goto block }
-                     | ReturnInstr -- return
+                     | ReturnInstr {returnValue :: Variable} -- return
                         deriving (Show)
 
 -- Constants.

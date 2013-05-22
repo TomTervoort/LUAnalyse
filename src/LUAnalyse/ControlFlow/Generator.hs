@@ -7,76 +7,8 @@ import Control.Monad.State
 import Data.Map hiding (map, member)
 
 import LUAnalyse.ControlFlow.Flow
+import LUAnalyse.ControlFlow.State
 import qualified LUAnalyse.Parser.AST as Ast
-
--- Flow generation state.
-type FlowState = (Map BlockReference Block, [Instruction], Map String Variable, Int, BlockReference, BlockReference)
-
--- Starting state.
-initialFlowState :: FlowState
-initialFlowState = (empty, [], empty, 0, 0, -1)
-
--- Appends an instruction.
-appendInstruction :: Instruction -> State FlowState Variable
-appendInstruction instr = do
-    modify $ \ (blocks, instructions, variables, varCounter, blockCounter, blockRef) ->
-        (blocks, instructions ++ [instr], variables, varCounter, blockCounter, blockRef)
-    return $ var instr
-
--- Gets a new block reference.
-getBlockReference :: State FlowState BlockReference
-getBlockReference = do
-    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
-    put (blocks, instructions, variables, varCounter, blockCounter + 1, blockRef)
-    return blockCounter
-
--- Starts a block. Returns its reference.
-startBlock :: BlockReference -> State FlowState BlockReference
-startBlock blockRef = do
-    (blocks, _, variables, varCounter, blockCounter, _) <- get
-    put (blocks, [], variables, varCounter, blockCounter, blockRef)
-    return blockRef
-
--- Finishes a block. Returns its reference.
-finishBlock :: FlowInstruction -> State FlowState BlockReference
-finishBlock flowInstr = do
-    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
-    block <- return $ Block instructions flowInstr
-    put (insert blockRef block blocks, [], variables, varCounter, blockCounter, -1)
-    return blockCounter
-
--- Creates a variable alias.
-createVariableAlias :: String -> Variable -> State FlowState Variable
-createVariableAlias name var = do
-    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
-    put (blocks, instructions, insert name var variables, varCounter, blockCounter, blockRef)
-    return var
-
--- Gets a variable by name. The variable will be created if it does not yet exist.
-getVariable :: String -> State FlowState Variable
-getVariable name = do
-    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
-    case lookup name variables of
-        Just var -> do return var
-        Nothing -> do
-            put (blocks, instructions, newVariables, varCounter, blockCounter, blockRef)
-            return newVar
-                where
-                    newVariables = insert name newVar variables
-                    newVar       = Variable name
-
--- Looks up a variable by name.
-lookupVariable :: String -> State FlowState (Maybe Variable)
-lookupVariable name = do
-    (_, _, variables, _, _, _) <- get
-    return $ lookup name variables
-
--- Gets a new unique variable name.
-getNewVariable :: State FlowState Variable
-getNewVariable = do
-    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
-    put (blocks, instructions, variables, varCounter + 1, blockCounter, blockRef)
-    getVariable $ "%" ++ show varCounter
 
 -- Generates a control flow from an AST.
 generateControlFlow :: Ast.AST -> Flow
@@ -90,12 +22,19 @@ handleFunction block = do
     entryBlockRef <- getBlockReference
     exitBlockRef  <- getBlockReference
     
+    oldExitBlockReference <- getExitBlockReference
+    setExitBlockReference exitBlockRef
+    
     startBlock entryBlockRef
     handleBlock block
     finishBlock $ JumpInstr {target = exitBlockRef}
     
+    setExitBlockReference oldExitBlockReference
     startBlock exitBlockRef
-    finishBlock ReturnInstr
+    
+    retVar <- getVariable "%retval"
+    finishBlock ReturnInstr {returnValue = retVar}
+    
     return ()
 
 -- Handles a block.
@@ -107,7 +46,8 @@ handleBlock (Ast.StatList statements) = do
 handleStatement :: Ast.Statement -> State FlowState ()
 handleStatement statement =
     case statement of
-        Ast.AssignmentStatement {Ast.lhs = lhs, Ast.rhs = rhs} -> handleAssignments lhs rhs
+        Ast.AssignmentStatement {Ast.lhs = lhs, Ast.rhs = rhs} ->
+            handleAssignments lhs rhs
         
         Ast.CallStatement  {Ast.expr = expr} -> do
             handleExpr expr
@@ -119,17 +59,54 @@ handleStatement statement =
         Ast.WhileStatement {Ast.condition = condition, Ast.body = bodyBlock} ->
             handleWhile condition bodyBlock
             
+        Ast.RepeatStatement {Ast.body = bodyBlock, Ast.condition = condition} ->
+            handleRepeat bodyBlock condition 
+            
         Ast.DoStatement {Ast.body = bodyBlock} ->
             handleBlock bodyBlock
         
+        Ast.ReturnStatement {Ast.args = args} ->
+            handleReturn args
+            
+        Ast.BreakStatement ->
+            handleBreak
+        
         -- Ast.LocalStatement {locals :: [Name], inits :: [Expr]}
-        -- Ast.ReturnStatement {args :: [Expr]}
-        -- Ast.BreakStatement
-        -- Ast.RepeatStatement {body :: Block, condition :: Expr}
         -- Ast.FunctionDecl {isLocal :: Bool, name :: Name, argList :: [Name], body :: Block}
         -- Ast.GenericForStatement {vars :: [Name], generators :: [Expr], body :: Block}
         -- Ast.NumericForStatement {var :: Name, start :: Expr, end :: Expr, step :: Maybe Expr, body :: Block}
 
+-- Handles return.
+handleReturn :: [Ast.Expr] -> State FlowState ()
+handleReturn exprs = do
+    case exprs of
+        [expr] -> do
+                      exprVar <- handleExpr expr
+                      var     <- getVariable "%retval"
+                      
+                      appendInstruction $ AssignInstr {var = var, value = exprVar}
+                      return ()
+                      
+        []     -> do
+                      return ()
+    
+    exitBlockReference <- getExitBlockReference
+    junkBlockRef <- getBlockReference
+    finishBlock JumpInstr {target = exitBlockReference}
+    startBlock junkBlockRef
+    return ()
+
+-- Handles break.
+handleBreak :: State FlowState ()
+handleBreak = do
+    breakBlockReference <- getBreakBlockReference
+    if breakBlockReference == unavailableBlockRef
+        then error "Break used outside a loop control structure."
+        else do
+            junkBlockRef <- getBlockReference
+            finishBlock JumpInstr {target = breakBlockReference}
+            startBlock junkBlockRef
+            return ()
 
 -- Handles if.
 handleIf :: Ast.Expr -> Ast.Block -> Maybe Ast.Block -> State FlowState ()
@@ -180,6 +157,9 @@ handleWhile condition bodyBlock = do
     
     finishBlock JumpInstr {target = condBlockRef}
     
+    oldBreakBlockReference <- getBreakBlockReference
+    setBreakBlockReference endBlockRef
+    
     startBlock condBlockRef
     condVar <- handleExpr condition
     finishBlock CondJumpInstr {target = bodyBlockRef, alternative = endBlockRef, cond = condVar}
@@ -188,6 +168,28 @@ handleWhile condition bodyBlock = do
     handleBlock bodyBlock
     finishBlock JumpInstr {target = condBlockRef}
     
+    setBreakBlockReference oldBreakBlockReference
+    startBlock endBlockRef
+    
+    return ()
+
+-- Handles repeat.
+handleRepeat :: Ast.Block -> Ast.Expr -> State FlowState ()
+handleRepeat bodyBlock condition = do
+    bodyBlockRef <- getBlockReference
+    endBlockRef  <- getBlockReference
+    
+    finishBlock JumpInstr {target = bodyBlockRef}
+    
+    oldBreakBlockReference <- getBreakBlockReference
+    setBreakBlockReference endBlockRef
+    
+    startBlock bodyBlockRef
+    handleBlock bodyBlock
+    condVar <- handleExpr condition
+    finishBlock CondJumpInstr {target = endBlockRef, alternative = bodyBlockRef, cond = condVar}
+    
+    setBreakBlockReference oldBreakBlockReference
     startBlock endBlockRef
     
     return ()
@@ -325,6 +327,7 @@ handleConstant constant = do
     appendInstruction $ ConstInstr {var = var, constant = constant}
     return var
 
+-- Handles table construction.
 handleConstructor :: [(Ast.Expr, Ast.Expr)] -> State FlowState Variable
 handleConstructor pairs = do
     var <- getNewVariable
