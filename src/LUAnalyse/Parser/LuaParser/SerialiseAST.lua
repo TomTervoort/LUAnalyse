@@ -37,7 +37,7 @@ end
 
 -- Helpers for denoting optional values.
 just = function(arg)
-	return {ctor = 'Just', args = arg}
+	return {ctor = 'Just', args = {arg}}
 end
 
 nothing = function()
@@ -151,60 +151,60 @@ handleStatement = function(stat)
 		args = {handleExprList(stat.Lhs), handleExprList(stat.Rhs)}
 
 	elseif stat.AstType == 'CallStatement' then
-		args = {exp = handleExpr(stat.Expression)}
+		args = {handleExpr(stat.Expression)}
 
 	elseif stat.AstType == 'LocalStatement' then
-		args = {locals = handleNameList(stat.LocalList), inits = handleExprList(stat.InitList)}
+		args = {handleNameList(stat.LocalList), handleExprList(stat.InitList)}
 
 	elseif stat.AstType == 'IfStatement' then
-		args = {condition = handleExpr(stat.Clauses[1].Condition), 
-				thenBody  = handleBlock(stat.Clauses[1].Body),
-				elseBody = nothing()}
+		args = {handleExpr(stat.Clauses[1].Condition), -- second
+				handleBlock(stat.Clauses[1].Body), -- third
+				nothing()} -- first
 
 		if #stat.Clauses == 2  and not stat.Clauses[2].Condition then
-			args.elseBody = just(handleBlock(stat.Clauses[2].Body))
+			args[3] = just(handleBlock(stat.Clauses[2].Body))
 		elseif #stat.Clauses >= 2 then
 			table.remove(stat.Clauses, 1)
-			args.elseBody = just(handleStatement(stat))
+			args[3] = just(handleStatement(stat))
 		end
 
 	elseif stat.AstType == 'WhileStatement' then
-		args = {condition = stat.Condition, body = handleBlock(stat.Body)}
+		args = {stat.Condition, handleBlock(stat.Body)}
 
 	elseif stat.AstType == 'DoStatement' then
-		args = {body = handleBlock(stat.Body)}
+		args = {handleBlock(stat.Body)}
 
 	elseif stat.AstType == 'ReturnStatement' then
-		args = {args = handleExprList(stat.Arguments)}
+		args = {handleExprList(stat.Arguments)}
 
 	elseif stat.AstType == 'BreakStatement' then
 		args = {}
 
 	elseif stat.AstType == 'RepeatStatement' then
-		args = {body = handleBlock(stat.Body), condition = handleExpr(stat.Condition)}
+		args = {handleBlock(stat.Body), handleExpr(stat.Condition)}
 
 	elseif stat.AstType == 'Function' then
 		args = {
-			isLocal = (stat.IsLocal and 'True') or 'False',
-			name    = stat.Name.Name,
-			argList = handleNameList(stat.Arguments), --TODO?: varargs
-			body    = handleBlock(stat.Body)
+			(stat.IsLocal and 'True') or 'False',
+			stat.Name.Name,
+			handleNameList(stat.Arguments), --TODO?: varargs
+			handleBlock(stat.Body)
 		}
 
 	elseif stat.AstType == 'GenericForStatement' then
 		args = {
-			vars       = handleNameList(stat.VariableList),
-			generators = handleExprList(stat.Generators),
-			body       = handleBlock(stat.Body)
+			handleNameList(stat.VariableList),
+			handleExprList(stat.Generators),
+			handleBlock(stat.Body)
 		}
 
 	elseif stat.AstType == 'NumericForStatement' then
 		args = {
-			var     = stat.Variable.Name,
-			start   = handleExpr(stat.Start),
-			['end'] = handleExpr(stat.End),
-			step    = (stat.Step and just(handleExpr(stat.Step))) or nothing(),
-			body    = handleBlock(stat.Body)
+			stat.Variable.Name,
+			handleExpr(stat.Start),
+			handleExpr(stat.End),
+			(stat.Step and just(handleExpr(stat.Step))) or nothing(),
+			handleBlock(stat.Body)
 		}
 
 	end
@@ -239,6 +239,7 @@ stringify = function(root)
 		    for k,v in pairs(root.args) do
 			    if not first then argStr = argStr .. ',' end
 			    first = false
+			    
 			    argStr = argStr .. stringify(root.args[k])
 		    end
 		    argStr = argStr .. ')'

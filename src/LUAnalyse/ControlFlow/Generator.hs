@@ -10,86 +10,162 @@ import LUAnalyse.ControlFlow.Flow
 import qualified LUAnalyse.Parser.AST as Ast
 
 -- Flow generation state.
-type FlowState = (Map BlockReference Block, [Instruction], Map String Variable, Int, BlockReference)
+type FlowState = (Map BlockReference Block, [Instruction], Map String Variable, Int, BlockReference, BlockReference)
 
 -- Starting state.
 initialFlowState :: FlowState
-initialFlowState = (empty, [], empty, 0, 0)
+initialFlowState = (empty, [], empty, 0, 0, -1)
 
 -- Appends an instruction.
 appendInstruction :: Instruction -> State FlowState Variable
 appendInstruction instr = do
-    modify $ \ (blocks, instructions, variables, varCounter, blockCounter) ->
-        (blocks, instructions ++ [instr], variables, varCounter, blockCounter)
+    modify $ \ (blocks, instructions, variables, varCounter, blockCounter, blockRef) ->
+        (blocks, instructions ++ [instr], variables, varCounter, blockCounter, blockRef)
     return $ var instr
 
--- Gets current block reference.
+-- Gets a new block reference.
 getBlockReference :: State FlowState BlockReference
 getBlockReference = do
-    (_, _, _, _, blockCounter) <- get
+    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
+    put (blocks, instructions, variables, varCounter, blockCounter + 1, blockRef)
     return blockCounter
 
--- Appends a block. Returns its reference.
-appendBlock :: FlowInstruction -> State FlowState BlockReference
-appendBlock flowInstr = do
-    (blocks, instructions, variables, varCounter, blockCounter) <- get
+-- Starts a block. Returns its reference.
+startBlock :: BlockReference -> State FlowState BlockReference
+startBlock blockRef = do
+    (blocks, instructions, variables, varCounter, blockCounter, _) <- get
+    put (blocks, instructions, variables, varCounter, blockCounter, blockRef)
+    return blockRef
+
+-- Finishes a block. Returns its reference.
+finishBlock :: FlowInstruction -> State FlowState BlockReference
+finishBlock flowInstr = do
+    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
     block <- return $ Block instructions flowInstr
-    put (insert blockCounter block blocks, [], variables, varCounter, blockCounter + 1)
+    put (insert blockRef block blocks, [], variables, varCounter, blockCounter, -1)
     return blockCounter
 
 -- Creates a variable alias.
 createVariableAlias :: String -> Variable -> State FlowState Variable
 createVariableAlias name var = do
-    (blocks, instructions, variables, varCounter, blockCounter) <- get
-    put (blocks, instructions, insert name var variables, varCounter, blockCounter)
+    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
+    put (blocks, instructions, insert name var variables, varCounter, blockCounter, blockRef)
     return var
 
 -- Gets a variable by name. The variable will be created if it does not yet exist.
 getVariable :: String -> State FlowState Variable
 getVariable name = do
-    (blocks, instructions, variables, varCounter, blockCounter) <- get
+    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
     case lookup name variables of
         Just var -> do return var
         Nothing -> do
-            put (blocks, instructions, newVariables, varCounter, blockCounter)
+            put (blocks, instructions, newVariables, varCounter, blockCounter, blockRef)
             return newVar
                 where
                     newVariables = insert name newVar variables
                     newVar       = Variable name
 
--- Looks up a variable by name. An error will occur if the variable does not exist.
-lookupVariable :: String -> State FlowState Variable
+-- Looks up a variable by name.
+lookupVariable :: String -> State FlowState (Maybe Variable)
 lookupVariable name = do
-    (_, _, variables, _, _) <- get
-    case lookup name variables of
-        Just var -> return var
-        Nothing -> error $ "Variable named '" ++ name ++ "' does not exist."
+    (_, _, variables, _, _, _) <- get
+    return $ lookup name variables
 
 -- Gets a new unique variable name.
 getNewVariable :: State FlowState Variable
 getNewVariable = do
-    (blocks, instructions, variables, varCounter, blockCounter) <- get
-    put (blocks, instructions, variables, varCounter + 1, blockCounter)
+    (blocks, instructions, variables, varCounter, blockCounter, blockRef) <- get
+    put (blocks, instructions, variables, varCounter + 1, blockCounter, blockRef)
     getVariable $ "%" ++ show varCounter
 
 -- Generates a control flow from an AST.
 generateControlFlow :: Ast.AST -> Flow
 generateControlFlow ast = flow
     where
-        (flow, _, _, _, _) = execState (handleBlock ast) initialFlowState
+        (flow, _, _, _, _, _) = execState (handleFunction ast) initialFlowState
+
+-- Handles a function.
+handleFunction :: Ast.Block -> State FlowState ()
+handleFunction block = do
+    entryBlockRef <- getBlockReference
+    startBlock entryBlockRef
+    handleBlock block
+    finishBlock ReturnInstr
+    return ()
 
 -- Handles a block.
 handleBlock :: Ast.Block -> State FlowState ()
 handleBlock (Ast.StatList statements) = do
     mapM_ handleStatement statements
-    appendBlock ReturnInstr
-    return ()
 
 -- Handles a statement.
 handleStatement :: Ast.Statement -> State FlowState ()
 handleStatement statement =
     case statement of
         Ast.AssignmentStatement {Ast.lhs = lhs, Ast.rhs = rhs} -> handleAssignments lhs rhs
+        
+        Ast.CallStatement  {Ast.expr = expr} -> do
+            handleExpr expr
+            return ()
+        
+        Ast.IfStatement {Ast.condition = condition, Ast.thenBody = thenBlock, Ast.elseBody = elseBody} ->
+            handleIf condition thenBlock elseBody
+            
+                    
+                
+                
+        
+        -- Ast.CallStatement {Ast.expr = expr}
+        -- Ast.LocalStatement {locals :: [Name], inits :: [Expr]}
+        -- Ast.WhileStatement {condition :: Expr, body :: Block}
+        -- Ast.DoStatement {body :: Block}
+        -- Ast.ReturnStatement {args :: [Expr]}
+        -- Ast.BreakStatement
+        -- Ast.RepeatStatement {body :: Block, condition :: Expr}
+        -- Ast.FunctionDecl {isLocal :: Bool, name :: Name, argList :: [Name], body :: Block}
+        -- Ast.GenericForStatement {vars :: [Name], generators :: [Expr], body :: Block}
+        -- Ast.NumericForStatement {var :: Name, start :: Expr, end :: Expr, step :: Maybe Expr, body :: Block}
+
+
+-- Handles if.
+handleIf :: Ast.Expr -> Ast.Block -> Maybe Ast.Block -> State FlowState ()
+handleIf condition thenBlock elseBody = case elseBody of
+    Just elseBlock -> do
+        condVar <- handleExpr condition
+        
+        thenBlockRef <- getBlockReference
+        elseBlockRef <- getBlockReference
+        endBlockRef  <- getBlockReference
+        
+        finishBlock CondJumpInstr {target = thenBlockRef, alternative = elseBlockRef, cond = condVar}
+        
+        startBlock thenBlockRef
+        handleBlock thenBlock
+        finishBlock JumpInstr {target = endBlockRef}
+        
+        startBlock elseBlockRef
+        handleBlock elseBlock
+        finishBlock JumpInstr {target = endBlockRef}
+        
+        startBlock endBlockRef
+        
+        return ()
+        
+    Nothing -> do
+        condVar <- handleExpr condition
+        
+        thenBlockRef <- getBlockReference
+        endBlockRef  <- getBlockReference
+        
+        finishBlock CondJumpInstr {target = thenBlockRef, alternative = endBlockRef, cond = condVar}
+        
+        startBlock thenBlockRef
+        handleBlock thenBlock
+        finishBlock JumpInstr {target = endBlockRef}
+        
+        startBlock endBlockRef
+        
+        return ()
 
 -- Handles assignments.
 handleAssignments :: [Ast.Expr] -> [Ast.Expr] -> State FlowState ()
@@ -123,7 +199,11 @@ handleExpr :: Ast.Expr -> State FlowState Variable
 handleExpr expr = 
     case expr of
         -- Variable.
-        Ast.VarExpr (Ast.Name name) -> lookupVariable name
+        Ast.VarExpr (Ast.Name name) -> do
+            var <- lookupVariable name
+            case var of
+                Just var -> return var
+                Nothing  -> handleConstant NilConst
         
         -- Constants.
         Ast.NumberExpr double -> handleConstant $ NumberConst double
@@ -135,8 +215,7 @@ handleExpr expr =
         Ast.BinopExpr first op second -> handleBinaryOperator first op second
         Ast.UnopExpr op expr          -> handleUnaryOperator op expr
         
-        -- Ast.DotsExpr
-        -- Ast.CallExpr Expr [Expr]
+        -- Indexing.
         Ast.IndexExpr expr index -> do
             exprVar  <- handleExpr expr
             indexVar <- handleExpr index
@@ -150,6 +229,17 @@ handleExpr expr =
             
             appendInstruction $ MemberInstr {var = var, value = exprVar, member = Name member}
             return var
+        
+        -- Calls.
+        Ast.CallExpr method arguments -> do
+            methodVar <- handleExpr method
+            argVars   <- mapM handleExpr arguments
+            var       <- getNewVariable
+            
+            appendInstruction $ CallInstr {var = var, method = methodVar, args = argVars}
+            return var
+            
+        -- Ast.DotsExpr
         -- Ast.FunctionExpr [Name] Block
         -- Ast.ConstructorExpr [(String, Expr)]
 
@@ -178,7 +268,7 @@ handleBinaryOperator first (Ast.Operator op) second = do
                 "<=" -> LessEqInstr    {var = var, first = firstExpr, second = secondExpr}
                 ">=" -> GreaterEqInstr {var = var, first = firstExpr, second = secondExpr}
                 
-                -- TODO: && / ||
+                -- TODO: and / or
 
 -- Handles unary operators.
 handleUnaryOperator :: Ast.Operator -> Ast.Expr -> State FlowState Variable
@@ -199,60 +289,4 @@ handleConstant constant = do
     var <- getNewVariable
     appendInstruction $ ConstInstr {var = var, constant = constant}
     return var
-
-
-{-
-
-
-
-
-        
-        -- LocalStatement {locals = locals, inits = inits} ->
-        -- CallStatement {exp :: Expr} -- TODO: How is call a statement? It is an expression.
-        
-        {-
-        LocalStatement {locals :: [Name],  inits :: [Expr]}
-        IfStatement {condition :: Expr, thenBody ::  Block, elseBody :: Maybe Block}
-        WhileStatement {condition :: Expr, body :: Block}
-        DoStatement {body :: Block}
-        ReturnStatement {args :: [Expr]}
-        BreakStatement
-        RepeatStatement {body :: Block, condition :: Expr}
-        FunctionDecl {isLocal :: Bool, name :: Name, argList :: [Name], body :: Block} -- TODO?: method, varargs
-        GenericForStatement {vars :: [Name], generators :: [Expr], body :: Block}
-        NumericForStatement {var :: Name, start :: Expr, end :: Expr, step :: Maybe Expr, body :: Block}
-        -}
-
-
-
-
--- Handles a single assignment.
-handleAssignment :: [Ast.Expr] -> [Ast.Expr] -> State FlowState Variable
-handleAssignment lhs rhs = case lhs of
-    Ast.VarExpr (Ast.Name name) ->
-        rhsExpr ++ [AssignInstr {var = Variable name, value = var rhsExpr}]
-            where
-                rhsExpr = handleExpr rhs
-            
-    Ast.MemberExpr expr member ->
-        rhsExpr ++ exprExpr ++ [NewMemberInstr {var = var exprExpr, member = member, value = var rhsExpr}]
-            where
-                exprExpr = handleExpr expr
-                rhsExpr  = handleExpr rhs
-            
-    Ast.IndexExpr expr index ->
-        rhsExpr ++ exprExpr ++ indexExpr ++ [NewIndexInstr {var = var exprExpr, index = var indexExpr, value = var rhsExpr}]
-            where
-                exprExpr = handleExpr expr
-                indexExpr = handleExpr expr
-                rhsExpr  = handleExpr rhs
--}
-
-
-
-
-
--- StatList [
--- LocalStatement {locals = [Name "x"], inits = [NumberExpr 5.0]},
--- NumericForStatement {var = Name "i", start = NumberExpr 0.0, end = VarExpr (Name "x"), step = Nothing, body = StatList [CallStatement {exp = CallExpr (VarExpr (Name "print")) [VarExpr (Name "i")]}]}]
 

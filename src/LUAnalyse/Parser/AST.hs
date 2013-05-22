@@ -10,7 +10,7 @@ data Block = StatList [Statement]
               deriving (Typeable, Data, Show)
 
 data Statement = AssignmentStatement {lhs :: [Expr], rhs :: [Expr]}
-               | CallStatement {expr :: Expr} -- TODO: How is call a statement? It is an expression.
+               | CallStatement {expr :: Expr}
                | LocalStatement {locals :: [Name], inits :: [Expr]}
                | IfStatement {condition :: Expr, thenBody ::  Block, elseBody :: Maybe Block}
                | WhileStatement {condition :: Expr, body :: Block}

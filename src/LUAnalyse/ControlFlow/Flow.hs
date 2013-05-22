@@ -17,7 +17,7 @@ data Block = Block [Instruction] FlowInstruction
 data Instruction = ConstInstr {var :: Variable, constant :: Constant} -- a = constant
 
                  -- Special operators.
-                 | CallInstr {var :: Variable, method :: Name, args :: [Variable]} -- a = method(b, c, d)
+                 | CallInstr {var :: Variable, method :: Variable, args :: [Variable]} -- a = b(c, d, e)
                  | LengthInstr {var :: Variable, value :: Variable} -- a = #b
                  | ConcatInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b .. c
                  | MemberInstr {var :: Variable, value :: Variable, member :: Name} -- a = b.name
