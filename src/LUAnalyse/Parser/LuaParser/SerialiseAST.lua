@@ -124,20 +124,27 @@ handleExpr = function(expr)
 	elseif expr.AstType == 'ConstructorExpr' then
 		local content = {}
 		local arrayIndex = 1
-		for entry in Expr.EntryList do
-			if entry.Type == 'Key' or entry.Type == 'KeyString' then
-				table.insert(content, {formatString(entry.Key), handleExpr(entry.Value)})
+		for k,entry in pairs(expr.EntryList) do
+			if entry.Type == 'KeyString' then
+			    local str = {ctor = "StringExpr", args = {formatString(entry.Key)}}
+			    
+				table.insert(content, {str, handleExpr(entry.Value)})
+			elseif entry.Type == 'Key' then
+				table.insert(content, {handleExpr(entry.Key), handleExpr(entry.Value)})
 			elseif entry.Type == 'Value' then
-				table.insert(content, {arrayIndex, handleExpr(entry.Value)})
+			    local num = {ctor = "NumberExpr", args = {arrayIndex}}
+			    
+				table.insert(content, {num, handleExpr(entry.Value)})
 				arrayIndex = arrayIndex + 1
 			end
 		end
 
-		listArgs = {}
+		local listArgs = {}
 		for k,v in pairs(content) do
 			listArgs[k] = {ctor = 'Pair', args = v}
 		end
-		args = {ctor = 'List', args = listArgs}
+		
+		args = {{ctor = 'List', args = listArgs}}
 	end
 
 	return {ctor = ctor, args = args}
@@ -169,7 +176,7 @@ handleStatement = function(stat)
 		end
 
 	elseif stat.AstType == 'WhileStatement' then
-		args = {stat.Condition, handleBlock(stat.Body)}
+		args = {handleExpr(stat.Condition), handleBlock(stat.Body)}
 
 	elseif stat.AstType == 'DoStatement' then
 		args = {handleBlock(stat.Body)}

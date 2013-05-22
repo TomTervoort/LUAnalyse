@@ -35,7 +35,7 @@ data Expr = VarExpr Name
           | IndexExpr Expr Expr
           | MemberExpr Expr Name
           | FunctionExpr [Name] Block
-          | ConstructorExpr [(String, Expr)]
+          | ConstructorExpr [(Expr, Expr)]
              deriving (Typeable, Data, Show)
 
 newtype Operator = Operator String deriving (Typeable, Data, Show)

@@ -14,7 +14,8 @@ data Block = Block [Instruction] FlowInstruction
 -- TODO: Incorporate functions, with in and out values (arguments and return values)
 
 -- Normal instructions.
-data Instruction = ConstInstr {var :: Variable, constant :: Constant} -- a = constant
+data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
+                 | ConstInstr {var :: Variable, constant :: Constant} -- a = constant
 
                  -- Special operators.
                  | CallInstr {var :: Variable, method :: Variable, args :: [Variable]} -- a = b(c, d, e)
@@ -30,8 +31,8 @@ data Instruction = ConstInstr {var :: Variable, constant :: Constant} -- a = con
                  | SubInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b - c
                  | MulInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b * c
                  | DivInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b / c
-                 | ModInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b % c
                  | PowInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b ^ c
+                 | ModInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b % c
                  | MinusInstr {var :: Variable, value :: Variable} -- a = -b
                  
                  -- Relational operators.

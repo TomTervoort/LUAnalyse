@@ -1,21 +1,22 @@
+-- Constructor.
+a = {b = 10, [c] = 11, 12}
 
+-- While loop.
+a = 0
+while a <= 10 do
+    a = a + 1
+end
 
+-- Simple assignments.
+a,b,c = "abc",nil,12.2
 
--- a,b,c = "abc",nil,12.2
+a.b = 10 + 11
+a[b] = 10
+a.b.c = 10
 
 -- false does not work
 
--- a.b = 10 + 11
-
--- a = 10
-
--- a[b] = 10
-
--- a.b.c = 10
-
-a = 1
-b = 2
-
+-- If.
 if a then
     b = 10
     d = b + a
@@ -36,4 +37,4 @@ else
     abc()
 end
 
-
+-- elseif...

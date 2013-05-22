@@ -39,25 +39,36 @@ getConstrByName name ty = fmap (indexConstr ty . (+1))
                              $ dataTypeConstrs ty
 
 readData :: forall a. Data a => String -> a
-readData inp = dataInp `extB` stringInp           `extB` numInp              
-                       `extB` nameInp             `extB` (listInp :: [Statement])  
-                       `extB` (listInp :: [Expr]) `extB` (listInp :: [Name])
+readData inp = dataInp `extB` stringInp                `extB` numInp              
+                       `extB` nameInp                  `extB` (pairInp :: (Expr, Expr))
+                       `extB` (listInp :: [Statement]) `extB` (listInp :: [Expr])
+                       `extB` (listInp :: [Name])      `extB` (listInp :: [(Expr, Expr)])
 
  where ty :: DataType
        ty = dataTypeOf (undefined :: a)
+       
        stringInp :: String
        stringInp = unescape $ init $ tail $ inp
+       
        unescape []          = []
        unescape ('\'':c:cs) = c : unescape cs
        unescape (c:cs)      = c : unescape cs
+       
        numInp :: Double
        numInp = read inp
+       
        nameInp :: Name
        nameInp = Name inp
+       
+       pairInp :: forall a b. (Data a, Data b) => (a, b)
+       pairInp = case splitCtorString inp of
+                  ("Pair", [first, second]) -> (readData first, readData second)
+                  (ctor, _)          -> error $ "Expecting pair, got '" ++ ctor ++ "'."
+       
        listInp :: forall b. Data b => [b]
        listInp = case splitCtorString inp of
                   ("List", contents) -> map readData contents
-                  (ctor, _)          -> error $ "Expecting List, got '" ++ ctor ++ "'."
+                  (ctor, _)          -> error $ "Expecting list, got '" ++ ctor ++ "'."
 
        dataInp :: a
        dataInp = let (ctor, args) = splitCtorString inp
@@ -66,6 +77,7 @@ readData inp = dataInp `extB` stringInp           `extB` numInp
                                                   ++ "' has no constructor named '"
                                                   ++ ctor ++ "'."
                       Just c  -> evalState (fromConstrM readArgs c) args
+       
        readArgs :: forall b. Data b => State [String] b
        readArgs = state $ \(x:xs) -> (readData x, xs)
 

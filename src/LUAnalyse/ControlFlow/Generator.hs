@@ -33,8 +33,8 @@ getBlockReference = do
 -- Starts a block. Returns its reference.
 startBlock :: BlockReference -> State FlowState BlockReference
 startBlock blockRef = do
-    (blocks, instructions, variables, varCounter, blockCounter, _) <- get
-    put (blocks, instructions, variables, varCounter, blockCounter, blockRef)
+    (blocks, _, variables, varCounter, blockCounter, _) <- get
+    put (blocks, [], variables, varCounter, blockCounter, blockRef)
     return blockRef
 
 -- Finishes a block. Returns its reference.
@@ -88,8 +88,13 @@ generateControlFlow ast = flow
 handleFunction :: Ast.Block -> State FlowState ()
 handleFunction block = do
     entryBlockRef <- getBlockReference
+    exitBlockRef  <- getBlockReference
+    
     startBlock entryBlockRef
     handleBlock block
+    finishBlock $ JumpInstr {target = exitBlockRef}
+    
+    startBlock exitBlockRef
     finishBlock ReturnInstr
     return ()
 
@@ -111,14 +116,13 @@ handleStatement statement =
         Ast.IfStatement {Ast.condition = condition, Ast.thenBody = thenBlock, Ast.elseBody = elseBody} ->
             handleIf condition thenBlock elseBody
             
-                    
-                
-                
+        Ast.WhileStatement {Ast.condition = condition, Ast.body = bodyBlock} ->
+            handleWhile condition bodyBlock
+            
+        Ast.DoStatement {Ast.body = bodyBlock} ->
+            handleBlock bodyBlock
         
-        -- Ast.CallStatement {Ast.expr = expr}
         -- Ast.LocalStatement {locals :: [Name], inits :: [Expr]}
-        -- Ast.WhileStatement {condition :: Expr, body :: Block}
-        -- Ast.DoStatement {body :: Block}
         -- Ast.ReturnStatement {args :: [Expr]}
         -- Ast.BreakStatement
         -- Ast.RepeatStatement {body :: Block, condition :: Expr}
@@ -167,6 +171,27 @@ handleIf condition thenBlock elseBody = case elseBody of
         
         return ()
 
+-- Handles while.
+handleWhile :: Ast.Expr -> Ast.Block -> State FlowState ()
+handleWhile condition bodyBlock = do
+    condBlockRef <- getBlockReference
+    bodyBlockRef <- getBlockReference
+    endBlockRef  <- getBlockReference
+    
+    finishBlock JumpInstr {target = condBlockRef}
+    
+    startBlock condBlockRef
+    condVar <- handleExpr condition
+    finishBlock CondJumpInstr {target = bodyBlockRef, alternative = endBlockRef, cond = condVar}
+    
+    startBlock bodyBlockRef
+    handleBlock bodyBlock
+    finishBlock JumpInstr {target = condBlockRef}
+    
+    startBlock endBlockRef
+    
+    return ()
+
 -- Handles assignments.
 handleAssignments :: [Ast.Expr] -> [Ast.Expr] -> State FlowState ()
 handleAssignments lhs rhs = mapM_ (uncurry handleAssignment) $ zip lhs rhs
@@ -177,15 +202,19 @@ handleAssignment lhs rhs =
     case lhs of
         Ast.VarExpr (Ast.Name name) -> do
             rhsVar <- handleExpr rhs
-            createVariableAlias name rhsVar
+            var    <- getVariable name
+            
+            appendInstruction $ AssignInstr {var = var, value = rhsVar}
             
             return rhsVar
+            
         Ast.MemberExpr expr (Ast.Name member) -> do
             rhsVar  <- handleExpr rhs
             exprVar <- handleExpr expr
             
             appendInstruction $ NewMemberInstr {var = exprVar, member = Name member, value = rhsVar}
             return rhsVar
+            
         Ast.IndexExpr expr index -> do
             rhsVar   <- handleExpr rhs
             exprVar  <- handleExpr expr
@@ -200,16 +229,20 @@ handleExpr expr =
     case expr of
         -- Variable.
         Ast.VarExpr (Ast.Name name) -> do
-            var <- lookupVariable name
-            case var of
-                Just var -> return var
-                Nothing  -> handleConstant NilConst
+            getVariable name
+            -- var <- lookupVariable name
+            -- case var of
+            --    Just var -> return var
+            --    Nothing  -> handleConstant NilConst -- TODO: Forward references.
         
         -- Constants.
         Ast.NumberExpr double -> handleConstant $ NumberConst double
         Ast.StringExpr str    -> handleConstant $ StringConst str
         Ast.BooleanExpr bool  -> handleConstant $ BooleanConst bool
         Ast.NilExpr           -> handleConstant NilConst
+        
+        -- Table constructor.
+        Ast.ConstructorExpr pairs -> handleConstructor pairs
         
         -- Operators.
         Ast.BinopExpr first op second -> handleBinaryOperator first op second
@@ -241,7 +274,6 @@ handleExpr expr =
             
         -- Ast.DotsExpr
         -- Ast.FunctionExpr [Name] Block
-        -- Ast.ConstructorExpr [(String, Expr)]
 
 -- Handles binary operators.
 handleBinaryOperator :: Ast.Expr -> Ast.Operator -> Ast.Expr -> State FlowState Variable
@@ -258,8 +290,10 @@ handleBinaryOperator first (Ast.Operator op) second = do
                 "-" -> SubInstr {var = var, first = firstExpr, second = secondExpr}
                 "*" -> MulInstr {var = var, first = firstExpr, second = secondExpr}
                 "/" -> DivInstr {var = var, first = firstExpr, second = secondExpr}
-                "%" -> ModInstr {var = var, first = firstExpr, second = secondExpr}
                 "^" -> PowInstr {var = var, first = firstExpr, second = secondExpr}
+                "%" -> ModInstr {var = var, first = firstExpr, second = secondExpr}
+                
+                ".." -> ConcatInstr {var = var, first = firstExpr, second = secondExpr}
                 
                 "==" -> EqInstr        {var = var, first = firstExpr, second = secondExpr}
                 "~=" -> NotEqInstr     {var = var, first = firstExpr, second = secondExpr}
@@ -280,8 +314,9 @@ handleUnaryOperator (Ast.Operator op) expr = do
     return var
         where
             opInstruction var exprVar = case op of
-                "-"   -> MinusInstr {var = var, value = exprVar}
-                "not" -> NotInstr   {var = var, value = exprVar}
+                "-"   -> MinusInstr  {var = var, value = exprVar}
+                "not" -> NotInstr    {var = var, value = exprVar}
+                "#"   -> LengthInstr {var = var, value = exprVar}
 
 -- Handles constants.
 handleConstant :: Constant -> State FlowState Variable
@@ -290,3 +325,17 @@ handleConstant constant = do
     appendInstruction $ ConstInstr {var = var, constant = constant}
     return var
 
+handleConstructor :: [(Ast.Expr, Ast.Expr)] -> State FlowState Variable
+handleConstructor pairs = do
+    var <- getNewVariable
+    appendInstruction $ ConstInstr {var = var, constant = TableConst}
+    
+    case var of
+        (Variable varName) ->
+            mapM_ (\(key, value) -> handleAssignment (Ast.IndexExpr (Ast.VarExpr $ Ast.Name varName) key) value) pairs
+    
+    return var
+
+-- Post-processing:
+-- - Set constant flag for every instruction.
+-- - Create member instrs from value instrs
