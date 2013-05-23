@@ -9,6 +9,8 @@ data LuaType
     | String -- number-coercible or not? length range?
     | Table TableType -- array? cardinality?
     | Function FunctionType
+    -- | Thread
+    -- | UserData
 
 data LuaTypeSet
     = LuaTypeSet [LuaType]
