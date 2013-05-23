@@ -247,6 +247,9 @@ handleExpr expr =
         Ast.ConstructorExpr pairs -> handleConstructor pairs
         
         -- Operators.
+        Ast.BinopExpr first (Ast.Operator "and") second -> handleAndOperator first second
+        Ast.BinopExpr first (Ast.Operator "or") second  -> handleOrOperator first second
+        
         Ast.BinopExpr first op second -> handleBinaryOperator first op second
         Ast.UnopExpr op expr          -> handleUnaryOperator op expr
         
@@ -277,6 +280,66 @@ handleExpr expr =
         -- Ast.DotsExpr
         -- Ast.FunctionExpr [Name] Block
 
+-- Handles and operator.
+handleAndOperator :: Ast.Expr -> Ast.Expr -> State FlowState Variable
+handleAndOperator first second = do
+    -- Get block references.
+    firstBlockRef  <- getBlockReference
+    secondBlockRef <- getBlockReference
+    endBlockRef    <- getBlockReference
+    
+    -- Check if first value is true.
+    var      <- getNewVariable
+    firstVar <- handleExpr first
+    finishBlock CondJumpInstr {target = firstBlockRef, alternative = secondBlockRef, cond = firstVar}
+    
+    -- If so, set to second value.
+    startBlock firstBlockRef
+    secondVar <- handleExpr second
+    appendInstruction $ AssignInstr {var = var, value = secondVar}
+    finishBlock JumpInstr {target = endBlockRef}
+    
+    -- Or set to false.
+    startBlock secondBlockRef
+    falseVar <- handleConstant $ BooleanConst False
+    appendInstruction $ AssignInstr {var = var, value = falseVar}
+    finishBlock JumpInstr {target = endBlockRef}
+    
+    -- Start end block.
+    startBlock endBlockRef
+    
+    return var
+
+-- Handles or operator.
+handleOrOperator :: Ast.Expr -> Ast.Expr -> State FlowState Variable
+handleOrOperator first second = do
+    -- Get block references.
+    firstBlockRef  <- getBlockReference
+    secondBlockRef <- getBlockReference
+    endBlockRef    <- getBlockReference
+    
+    -- Check if first value is false.
+    var      <- getNewVariable
+    firstVar <- handleExpr first
+    finishBlock CondJumpInstr {target = secondBlockRef, alternative = firstBlockRef, cond = firstVar}
+    
+    -- If so, set to second value.
+    startBlock firstBlockRef
+    secondVar <- handleExpr second
+    appendInstruction $ AssignInstr {var = var, value = secondVar}
+    finishBlock JumpInstr {target = endBlockRef}
+    
+    -- Or set to true.
+    startBlock secondBlockRef
+    trueVar <- handleConstant $ BooleanConst True
+    appendInstruction $ AssignInstr {var = var, value = trueVar}
+    finishBlock JumpInstr {target = endBlockRef}
+    
+    -- Start end block.
+    startBlock endBlockRef
+    
+    return var
+
 -- Handles binary operators.
 handleBinaryOperator :: Ast.Expr -> Ast.Operator -> Ast.Expr -> State FlowState Variable
 handleBinaryOperator first (Ast.Operator op) second = do
@@ -303,8 +366,6 @@ handleBinaryOperator first (Ast.Operator op) second = do
                 ">"  -> GreaterInstr   {var = var, first = firstExpr, second = secondExpr}
                 "<=" -> LessEqInstr    {var = var, first = firstExpr, second = secondExpr}
                 ">=" -> GreaterEqInstr {var = var, first = firstExpr, second = secondExpr}
-                
-                -- TODO: and / or
 
 -- Handles unary operators.
 handleUnaryOperator :: Ast.Operator -> Ast.Expr -> State FlowState Variable

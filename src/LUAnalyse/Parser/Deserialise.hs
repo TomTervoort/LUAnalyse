@@ -39,10 +39,11 @@ getConstrByName name ty = fmap (indexConstr ty . (+1))
                              $ dataTypeConstrs ty
 
 readData :: forall a. Data a => String -> a
-readData inp = dataInp `extB` stringInp                `extB` numInp              
-                       `extB` nameInp                  `extB` (pairInp :: (Expr, Expr))
-                       `extB` (listInp :: [Statement]) `extB` (listInp :: [Expr])
-                       `extB` (listInp :: [Name])      `extB` (listInp :: [(Expr, Expr)])
+readData inp = dataInp `extB` stringInp                 `extB` numInp              
+                       `extB` boolInp                   `extB` nameInp
+                       `extB` (pairInp :: (Expr, Expr)) `extB` (listInp :: [Statement])
+                       `extB` (listInp :: [Expr])       `extB` (listInp :: [Name])
+                       `extB` (listInp :: [(Expr, Expr)])
 
  where ty :: DataType
        ty = dataTypeOf (undefined :: a)
@@ -56,6 +57,9 @@ readData inp = dataInp `extB` stringInp                `extB` numInp
        
        numInp :: Double
        numInp = read inp
+       
+       boolInp :: Bool
+       boolInp = read inp
        
        nameInp :: Name
        nameInp = Name inp

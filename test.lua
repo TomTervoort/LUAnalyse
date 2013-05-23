@@ -1,3 +1,10 @@
+
+a = true
+
+return 1 and 2
+
+--[[
+
 -- Constructor.
 a = {b = 10, [c] = 11, 12}
 
@@ -24,7 +31,6 @@ a.b = 10 + 11
 a[b] = 10
 a.b.c = 10
 
--- false does not work
 -- "abc" --> "\"abc\""
 
 -- If.
@@ -54,3 +60,4 @@ do
     return 1
 end
 
+--]]
