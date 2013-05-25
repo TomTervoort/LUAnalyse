@@ -1,10 +1,13 @@
-{-# LANGUAGE Haskell2010 #-}
+{-# LANGUAGE Haskell2010, FunctionalDependencies #-}
 
 
 module LUAnalyse.Framework.Framework where
 
 import LUAnalyse.Framework.Lattice
 import LUAnalyse.ControlFlow.Flow 
+
+import Data.Map (Map)
+import qualified Data.Map as M
 
 data AnalysisDirection = ForwardsAnalysis
                        | BackwardsAnalysis

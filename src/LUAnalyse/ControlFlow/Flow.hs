@@ -75,7 +75,7 @@ data Constant = NumberConst Double -- 10.1
 newtype Variable = Variable String deriving (Show)
 
 -- A block reference.
-type BlockReference = Int deriving (Eq, Ord, Show)
+type BlockReference = Int
 
 -- A name.
 newtype Name = Name String deriving (Show)
