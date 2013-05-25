@@ -4,6 +4,14 @@ module LUAnalyse.ControlFlow.Flow where
 
 import Data.Map hiding (map, member)
 
+-- | Representation of a Lua program. Contains a program flow and denotes through which block in 
+--   this flow the program is entered.
+data Program = Program {flow :: Flow, entry :: BlockReference}
+
+-- | A label through which an instruction within a program can be identified.
+data InstructionLabel = InstructionLabel {block :: BlockReference, instructionIndex :: Int}
+                         deriving (Eq, Ord, Show)
+
 -- The flow graph.
 type Flow = Map BlockReference Block
 
@@ -51,6 +59,7 @@ data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
 data FlowInstruction = JumpInstr {target :: BlockReference} -- goto block
                      | CondJumpInstr {target :: BlockReference, alternative :: BlockReference, cond :: Variable} -- if (a) { goto block }
                      | ReturnInstr {returnValue :: Variable} -- return
+                     | ExitInstr                             -- end of block, no return value.
                         deriving (Show)
 
 -- Constants.
@@ -66,7 +75,7 @@ data Constant = NumberConst Double -- 10.1
 newtype Variable = Variable String deriving (Show)
 
 -- A block reference.
-type BlockReference = Int
+type BlockReference = Int deriving (Eq, Ord, Show)
 
 -- A name.
 newtype Name = Name String deriving (Show)
