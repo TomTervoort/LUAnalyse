@@ -81,7 +81,7 @@ extremalLabels p BackwardAnalysis = fromMaybe S.empty $ findExits $ entry p
                                                  eb <- findExits b
                                                  return (ea `S.union` eb)
                        ReturnInstr _       -> Nothing
-                       ExitInstr           -> Nothing                      
+                       ExitInstr           -> Nothing
 
 
 nextInstructions :: Program -> InstructionLabel -> [InstructionLabel]

@@ -42,15 +42,11 @@ class Eq l => Lattice l where
  intersection :: [l] -> l
  intersection = foldr meet top
 
-
-
--- | Simple example instance of (bounded) integer lattice with relation <=.
-instance Lattice Int where
- (</) = (<=)
- join = max
- meet = min
- bottom = minBound
- top = maxBound
- union = maximum
- intersection = minimum
-
+-- | A Bool lattice that uses boolean implication as the relation. This means bottom is False and 
+--   top is True.
+instance Lattice Bool where
+ a </ b = not a || b
+ join = (||)
+ meet = (&&)
+ bottom = False
+ top = True
