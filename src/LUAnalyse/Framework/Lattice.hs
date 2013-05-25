@@ -12,34 +12,34 @@ infix 6 `meet`
 -- | An instance of this class forms a complete lattice in combination with a partial order 
 --   relation represented by the operator (</). Since this operator is a class member, only one 
 --   lattice can be defined per datatype.
-class Eq a => Lattice a where
- -- | A partial order on the datatype a for which (a, </) is a lattice. It has a (probably 
+class Eq l => Lattice l where
+ -- | A partial order on the datatype l for which (l, </) is a lattice. It has a (probably 
  --   innefficient) default definition in terms of join; overriding this is recommended.
- (</) :: a -> a -> Bool
+ (</) :: l -> l -> Bool
  x </ y = x `join` y == y
 
   -- | (</) with its arguments flipped.
- (\>) :: a -> a -> Bool
+ (\>) :: l -> l -> Bool
  (\>) = flip (</)
 
  -- | The lattice join operator. 
- join :: a -> a -> a
+ join :: l -> l -> l
 
  -- | The lattice meet operator. 
- meet :: a -> a -> a
+ meet :: l -> l -> l
 
  -- | The lattice bottom. @bottom </@ any other value of type a.
- bottom :: a
+ bottom :: l
 
  -- | The lattice top. @top \>@ any other value of type a.
- top :: a
+ top :: l
 
  -- | Joins the elements of a list.
- union :: [a] -> a
+ union :: [l] -> l
  union = foldr join bottom
 
  -- | Meets the elements of a list.
- intersection :: [a] -> a
+ intersection :: [l] -> l
  intersection = foldr meet top
 
 
