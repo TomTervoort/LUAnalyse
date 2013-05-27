@@ -4,16 +4,18 @@ module LUAnalyse.Analysis.SoftTyping.Types where
 
 import LUAnalyse.Framework.Lattice
 
+import Data.List
+
 type LuaNumber = Double
 type LuaString = String
 type LuaVariable = String
 
 data LuaType
     = Nil
-    | Boolean
+    | Boolean 
     | Number -- range? integral?
     | String -- number-coercible or not? length range?
-    | Table TableType -- array? cardinality?
+    | Table TableType  -- array? cardinality?
     | Function FunctionType
     -- | Thread
     -- | UserData
@@ -26,7 +28,7 @@ data LuaTypeSet
 topLuaTypeSet :: LuaTypeSet
 topLuaTypeSet = LuaTypeSet
     [ Nil
-    , Boolean
+    , Boolean 
     , Number
     , String
     , Table TableTop
@@ -54,8 +56,27 @@ data FunctionEffects
     = FunctionEffects [(LuaVariable, LuaTypeSet -> LuaTypeSet)]
     | EffectTop
 
+-- | Indicates whether the first type is a 'subtype' of the second type. For table and function 
+--   types, this is equivalent to (</). For other types, a `subType` b holds only if the types are
+--   equal. This means that, for example, a number is not a subtype of a string, even though 
+--   numbers can be coerced to strings. 
+--   TODO: do we want this? Or do we want to specify some coercion rules here? Or do we want to 
+--         take care of coercion in the definition of the FunctionType lattice?
+subType :: LuaType -> LuaType -> Bool
+subType a b =
+ case (a,b) of
+  (Nil        , Nil        ) -> True
+  (Boolean    , Boolean    ) -> True
+  (Number     , Number     ) -> True
+  (String     , String     ) -> True
+  (Table ta   , Table tb   ) -> ta </ tb
+  (Function fa, Function fb) -> fa </ fb
+  (_,           _          ) -> False
 
--- | Table lattice.
+sameType :: LuaType -> LuaType -> Bool
+sameType a b = subType a b && subType b a
+
+-- | Table lattice. 
 --   NOTE: assumes tables are sorted on keys. Make sure to maintain this invariant.
 instance Lattice TableType where
  a </ b = 
@@ -105,10 +126,11 @@ instance Lattice FunctionType where
  bottom = FunctionType [] [] (FunctionEffects [])
  top = FunctionTop
 
+
 -- | The Lua type set lattice.
 instance Lattice LuaTypeSet where
- (</) = undefined 
- join = undefined
- meet = undefined
+ LuaTypeSet xs </ LuaTypeSet ys = all (\x -> any (subType x) ys) ys
+ join (LuaTypeSet xs) (LuaTypeSet ys) = LuaTypeSet $ unionBy sameType xs ys
+ meet (LuaTypeSet xs) (LuaTypeSet ys) = LuaTypeSet $ intersectBy sameType xs ys
  bottom = LuaTypeSet []
  top = topLuaTypeSet
