@@ -4,8 +4,8 @@
 module LUAnalyse.Framework.Framework (
                                         module LUAnalyse.ControlFlow.Flow,
                                         Analysis (..),
-                                        AnalysisType,
-                                        AnalysisDirection,
+                                        AnalysisType (..),
+                                        AnalysisDirection (..),
                                         performAnalysis
                                      ) where
 
@@ -131,8 +131,8 @@ graphRep = foldr (\(n,e) -> M.alter (addEdge e) n) M.empty
 -- | Performs the actual analysis using maximal fixpoint iteration. The result is a mapping of
 --   labels to the eventual state of the lattice before and after exiting the label (in the 
 --   direction of the analysis).
-performAnalysis :: forall a l. Analysis a l => Program -> a -> Map InstructionLabel (l, l)
-performAnalysis p a = addExits $ mfp edges' initialState
+performAnalysis :: forall a l. Analysis a l => a -> Program -> Map InstructionLabel (l, l)
+performAnalysis a p = addExits $ mfp edges' initialState
  where (atype, adir) = analysisKind a
        trans = transfer a
        edges' = edges p adir
