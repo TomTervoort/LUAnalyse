@@ -3,7 +3,7 @@
 -- | Contains a simple analysis that determines which variables in the program have never been 
 --   assigned to after intialization and are therefore constant. This is very useful for functions,
 --   because with this knowledge we know when we can treat them as non-higher order procedures.
-module LUAnalyse.Analysis.Constants where
+module LUAnalyse.Analysis.Constants (performConstantsAnalysis) where
 
 import LUAnalyse.Framework.Lattice
 import LUAnalyse.Framework.Framework
@@ -38,7 +38,7 @@ updateWithAssignment v (ConstantVars m) = ConstantVars $ M.alter addVar v m
        addVar (Just NoAssignments) = Just OneAssignment
        addVar _                    = Just MultipleAssignments
 
--- | @AssignmentStatus@ itself forms a lattice.
+-- | @AssignmentStatus@ itself forms a simple lattice.
 instance Lattice AssignmentStatus where
  (</) = (<=)
  join = max
