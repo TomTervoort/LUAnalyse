@@ -72,7 +72,7 @@ data Constant = NumberConst Double -- 10.1
               -- TODO: Function ? ... ? {...} ?
 
 -- A variable reference.
-newtype Variable = Variable String deriving (Show)
+newtype Variable = Variable String deriving (Eq, Ord, Show)
 
 -- A block reference.
 type BlockReference = Int

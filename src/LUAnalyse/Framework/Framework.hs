@@ -2,6 +2,7 @@
 
 
 module LUAnalyse.Framework.Framework (
+                                        module LUAnalyse.ControlFlow.Flow,
                                         Analysis (..),
                                         AnalysisType,
                                         AnalysisDirection,
@@ -34,9 +35,10 @@ data AnalysisType = MustAnalysis
 
 -- | A type class representing an analysis of Lua programs within the monothonic framework. Here 
 --   @a@ is a datatype representing the analysis. It may be a simple marker unit type but might
---   also contain parameters or settings for the analysis. @l@ is a lattice in which information
---   is stored that is gathered by the analysis (e.g. the available expressions or currently known
---   types of variables).
+--   also contain parameters or settings for the analysis (note that default definitions and
+--   framework functions will never evaluate a, so it may be a zero type). @l@ is a lattice in 
+--   which information is stored that is gathered by the analysis (e.g. the available expressions
+--   or currently known types of variables).
 class Lattice l => Analysis a l | a -> l where
  -- | A monotonic transfer function that updates the lattice based on the effects of a Lua 
  --   instruction.
@@ -46,8 +48,9 @@ class Lattice l => Analysis a l | a -> l where
  analysisKind :: a -> (AnalysisType, AnalysisDirection)
 
  -- | Returns true if the transfer function is distrubitive, meaning @transfer a i (l1 `join` l2)
- --   == transfer a i l1 `join` transfer a i l2@.
+ --   == transfer a i l1 `join` transfer a i l2@. Default is @const False@.
  isDistributive :: a -> Bool
+ isDistributive _ = False
 
  -- | The least informative value of the lattice. The default is top for must analyses, and bottom 
  --   for may analyses.

@@ -12,17 +12,15 @@ infix 6 `meet`
 -- | An instance of this class forms a complete lattice in combination with a partial order 
 --   relation represented by the operator (</). Since this operator is a class member, only one 
 --   lattice can be defined per datatype.
-class Eq l => Lattice l where
- -- | A partial order on the datatype l for which (l, </) is a lattice. It has a (probably 
- --   innefficient) default definition in terms of join; overriding this is recommended.
+class Lattice l where
+ -- | A partial order on the datatype l for which (l, </) is a lattice.
  (</) :: l -> l -> Bool
- x </ y = x `join` y == y
 
   -- | (</) with its arguments flipped.
  (\>) :: l -> l -> Bool
  (\>) = flip (</)
 
- -- | The lattice join operator. 
+ -- | The lattice join operator. It should hold that @ x </ y = x `join` y == y@.
  join :: l -> l -> l
 
  -- | The lattice meet operator. 
