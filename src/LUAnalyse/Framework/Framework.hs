@@ -65,27 +65,12 @@ labelInstructions = flow >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.
  where blockLabels :: BlockReference -> Block -> [(InstructionLabel, Instruction)]
        blockLabels ref (Block is _) = [(InstructionLabel ref ind, ins) | (ind, ins) <- zip [0..] is]
 
-extremalLabels :: Program -> AnalysisDirection -> Set InstructionLabel
--- TODO: handle case where first instruction block is empty
-extremalLabels p ForwardAnalysis  = S.singleton $ InstructionLabel (entry p) 0
-extremalLabels p BackwardAnalysis = fromMaybe S.empty $ findExits $ entry p
- where findExits ref = 
-        case M.lookup ref $ flow p of
-         Just (Block [] f) -> findExits' f
-         Just (Block is f) -> let finalLabel = InstructionLabel ref (length is - 1)
-                               in Just $ fromMaybe (S.singleton finalLabel) $ findExits' f
-         Nothing           -> error "Invalid BlockReference."
-       findExits' f = case f of
-                       JumpInstr b         -> findExits b
-                       CondJumpInstr a b _ -> do ea <- findExits a
-                                                 eb <- findExits b
-                                                 return (ea `S.union` eb)
-                       ReturnInstr _       -> Nothing
-                       ExitInstr           -> Nothing
-
-
-nextInstructions :: Program -> InstructionLabel -> [InstructionLabel]
-nextInstructions p (InstructionLabel ref ind) =
+-- | Gives the set of labels of instructions that are be executed after the one at a particular 
+--   label.
+nextInstructions :: Program -> Maybe InstructionLabel -> [InstructionLabel]
+nextInstructions p Nothing = 
+  nextInstructions p $ Just $ InstructionLabel (entry p) (-1)
+nextInstructions p (Just (InstructionLabel ref ind)) =
  let Block ins jump = flow p M.! ref
   in if ind < length ins - 1
       then [InstructionLabel ref (ind + 1)]
@@ -101,19 +86,39 @@ nextInstructions p (InstructionLabel ref ind) =
          Block [] j -> firstIns j
          Block _ _  -> [InstructionLabel r 0]
 
-edges :: Program -> [(InstructionLabel, InstructionLabel)]
-edges p = [(l, l') | l <- M.keys $ labelInstructions p, l' <- nextInstructions p l]
+-- | Provides the extremal labels of the program for a given direction.
+extremalLabels :: Program -> AnalysisDirection -> [InstructionLabel]
+extremalLabels p ForwardAnalysis = nextInstructions p Nothing
+extremalLabels p BackwardAnalysis = until (null . next) next $ nextInstructions p Nothing
+ where next = concatMap (nextInstructions p . Just)
+
+-- | Provides the edges of the program graph as (from,to) tuples. These are flipped for 
+--   BackwardsAnalysis.
+edges :: Program -> AnalysisDirection -> [(InstructionLabel, InstructionLabel)]
+edges p dir = [mayflip (l, l') 
+                | l <- M.keys $ labelInstructions p, l' <- nextInstructions p $ Just l]
+ where mayflip (a,b) = case dir of
+                        ForwardAnalysis  -> (a,b)
+                        BackwardAnalysis -> (b,a)
+
+-- | Turns the result of @edges@ into a graph representation that maps nodes to neighbours. This
+--   allows fast lookup of a particular instruction.
+graphRep :: [(InstructionLabel, InstructionLabel)] -> Map InstructionLabel [InstructionLabel]
+graphRep = foldr (\(n,e) -> M.alter (addEdge e) n) M.empty
+ where addEdge e es = Just $ e : fromMaybe [] es
 
 
 performAnalysis :: forall a l. Analysis a l => Program -> a -> Map InstructionLabel (l, l)
-performAnalysis p a = addExits $ mfp (edges p) initialState
+performAnalysis p a = addExits $ mfp edges' initialState
  where (atype, adir) = analysisKind a
        trans = transfer a
-       extremals = extremalLabels p adir
+       edges' = edges p adir
+       graph = graphRep edges'
        instructions = labelInstructions p
-       outgoing l = [(l, l') | l' <- nextInstructions p l]
+       outgoing l = [(l, l') | l' <- graph M.! l]
+       extremals = S.fromList $ extremalLabels p adir
        initialVal l | l `S.member` extremals = extremal a
-                    | otherwise = least a
+                    | otherwise              = least a
 
        initialState :: Map InstructionLabel l
        initialState = M.mapWithKey (\l _ -> initialVal l) instructions
