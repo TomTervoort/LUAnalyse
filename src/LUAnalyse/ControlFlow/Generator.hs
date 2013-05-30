@@ -11,23 +11,27 @@ import LUAnalyse.ControlFlow.State
 import qualified LUAnalyse.Parser.AST as Ast
 
 -- Generates a control flow from an AST.
-generateControlFlow :: Ast.AST -> Flow
-generateControlFlow ast = flow
+generateControlFlow :: Ast.AST -> Program
+generateControlFlow ast = Program {functions = functions, start = start}
     where
-        (flow, _, _, _, _, _) = execState (handleFunction ast) initialFlowState
+        (start, (functions, _, _, _, _, _, _, _)) = runState (handleFunction [] ast) initialFlowState
 
 -- Handles a function.
-handleFunction :: Ast.Block -> State FlowState ()
-handleFunction block = do
+handleFunction :: [Ast.Name] -> Ast.Block -> State FlowState FunctionReference
+handleFunction paramNames block = do
+    oldState <- startFunction
+    
     entryBlockRef <- getBlockReference
     exitBlockRef  <- getBlockReference
     
     oldExitBlockReference <- getExitBlockReference
     setExitBlockReference exitBlockRef
     
+    params <- mapM (\(Ast.Name name) -> getVariable name) paramNames
+    
     startBlock entryBlockRef
     handleBlock block
-    finishBlock $ JumpInstr {target = exitBlockRef}
+    finishBlock JumpInstr {target = exitBlockRef}
     
     setExitBlockReference oldExitBlockReference
     startBlock exitBlockRef
@@ -35,7 +39,7 @@ handleFunction block = do
     retVar <- getVariable "%retval"
     finishBlock ReturnInstr {returnValue = retVar}
     
-    return ()
+    finishFunction oldState entryBlockRef exitBlockRef params
 
 -- Handles a block.
 handleBlock :: Ast.Block -> State FlowState ()
@@ -276,9 +280,11 @@ handleExpr expr =
             
             appendInstruction $ CallInstr {var = var, method = methodVar, args = argVars}
             return var
-            
-        -- Ast.DotsExpr
-        -- Ast.FunctionExpr [Name] Block
+        
+        -- Closure.
+        Ast.FunctionExpr paramNames block -> do
+            functionRef <- handleFunction paramNames block
+            handleConstant $ FunctionConst functionRef
 
 -- Handles and operator.
 handleAndOperator :: Ast.Expr -> Ast.Expr -> State FlowState Variable

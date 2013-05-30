@@ -119,6 +119,7 @@ handleExpr = function(expr)
 		args = {handleExpr(expr.Base), expr.Ident.Data}
 
 	elseif expr.AstType == 'Function' then
+	    ctor = 'FunctionExpr'
 		args = {handleNameList(expr.Arguments), handleBlock(expr.Body)}
 
 	elseif expr.AstType == 'ConstructorExpr' then

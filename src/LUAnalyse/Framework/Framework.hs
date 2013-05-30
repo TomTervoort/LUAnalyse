@@ -6,7 +6,8 @@ module LUAnalyse.Framework.Framework (
                                         Analysis (..),
                                         AnalysisType (..),
                                         AnalysisDirection (..),
-                                        performAnalysis
+                                        performAnalysis,
+                                        labelInstructions
                                      ) where
 
 import LUAnalyse.Framework.Lattice
@@ -82,7 +83,7 @@ class Lattice l => Analysis a l | a -> l where
 
 -- | Fetch all instructions from a program as a mapping from labels.
 labelInstructions :: Program -> Map InstructionLabel Instruction
-labelInstructions = flow >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.fromList
+labelInstructions = functions >>> M.elems >>> map flow >>> M.unions >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.fromList
  where blockLabels :: BlockReference -> Block -> [(InstructionLabel, Instruction)]
        blockLabels ref (Block is _) = [(InstructionLabel ref ind, ins) | (ind, ins) <- zip [0..] is]
 
@@ -90,9 +91,9 @@ labelInstructions = flow >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.
 --   label.
 nextInstructions :: Program -> Maybe InstructionLabel -> [InstructionLabel]
 nextInstructions p Nothing = 
-  nextInstructions p $ Just $ InstructionLabel (entry p) (-1)
+  concatMap (\func -> nextInstructions p (Just $ InstructionLabel (entry func) (-1))) $ M.elems $ functions p
 nextInstructions p (Just (InstructionLabel ref ind)) =
- let Block ins jump = flow p M.! ref
+ let Block ins jump = wholeFlow M.! ref
   in if ind < length ins - 1
       then [InstructionLabel ref (ind + 1)]
       else firstIns jump
@@ -101,11 +102,11 @@ nextInstructions p (Just (InstructionLabel ref ind)) =
          JumpInstr x         -> firstIns' x
          CondJumpInstr a b _ -> firstIns' a ++ firstIns' b
          ReturnInstr _       -> []
-         ExitInstr           -> []
        firstIns' r = 
-        case flow p M.! r of
+        case wholeFlow M.! r of
          Block [] j -> firstIns j
          Block _ _  -> [InstructionLabel r 0]
+       wholeFlow = M.unions $ map flow $ M.elems $ functions p
 
 -- | Provides the extremal labels of the program for a given direction.
 extremalLabels :: Program -> AnalysisDirection -> [InstructionLabel]

@@ -7,16 +7,23 @@ import LUAnalyse.ControlFlow.Flow
 import Data.Map hiding (map, member)
 
 -- Formats flow.
-formatControlFlow :: Flow -> String
-formatControlFlow flow = foldrWithKey f "" flow
+formatControlFlow :: Program -> String
+formatControlFlow (Program {functions = functions}) = foldrWithKey f "" functions
     where
-        f reference block acc = (formatBlock reference block) ++ acc
+        f reference function acc = (formatFunction reference function) ++ "\n" ++ acc
+
+-- Formats flow.
+formatFunction :: FunctionReference -> Function -> String
+formatFunction funcReference (Function {flow = flow, params = params}) = 
+    "function " ++ (show funcReference) ++ ":\n\targs = " ++ (show params) ++ "\n\n" ++ (foldrWithKey f "" flow)
+        where
+            f blockReference block acc = (formatBlock blockReference block) ++ acc
 
 -- Formats block.
 formatBlock :: BlockReference -> Block -> String
 formatBlock reference (Block instructions flowInstr) =
-    "block " ++ (show reference) ++ ":\n" ++ (concatMap formatInstruction instructions) ++ "\t" ++ show flowInstr ++ "\n"
+    "\tblock " ++ (show reference) ++ ":\n" ++ (concatMap formatInstruction instructions) ++ "\t\t" ++ show flowInstr ++ "\n"
 
 -- Formats an instruction.
 formatInstruction :: Instruction -> String
-formatInstruction instr = "\t" ++ show instr ++ "\n"
+formatInstruction instr = "\t\t" ++ show instr ++ "\n"

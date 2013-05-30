@@ -6,11 +6,20 @@ import Data.Map hiding (map, member)
 
 -- | Representation of a Lua program. Contains a program flow and denotes through which block in 
 --   this flow the program is entered.
-data Program = Program {flow :: Flow, entry :: BlockReference}
+--data Program = Program {flow :: Flow, entry :: BlockReference}
+
+
+
 
 -- | A label through which an instruction within a program can be identified.
 data InstructionLabel = InstructionLabel {block :: BlockReference, instructionIndex :: Int}
                          deriving (Eq, Ord, Show)
+
+-- A whole program.
+data Program = Program {functions :: Map FunctionReference Function, start :: FunctionReference}
+
+-- A function.
+data Function = Function {flow :: Flow, entry :: BlockReference, exit :: BlockReference, params :: [Variable]}
 
 -- The flow graph.
 type Flow = Map BlockReference Block
@@ -18,8 +27,6 @@ type Flow = Map BlockReference Block
 -- A block of instructions.
 data Block = Block [Instruction] FlowInstruction
                deriving (Show)
-
--- TODO: Incorporate functions, with in and out values (arguments and return values)
 
 -- Normal instructions.
 data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
@@ -59,17 +66,16 @@ data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
 data FlowInstruction = JumpInstr {target :: BlockReference} -- goto block
                      | CondJumpInstr {target :: BlockReference, alternative :: BlockReference, cond :: Variable} -- if (a) { goto block }
                      | ReturnInstr {returnValue :: Variable} -- return
-                     | ExitInstr                             -- end of block, no return value.
                         deriving (Show)
 
 -- Constants.
-data Constant = NumberConst Double -- 10.1
+data Constant = FunctionConst FunctionReference -- function (a, b) ... end 
+              | NumberConst Double -- 10.1
               | StringConst String -- "abc"
               | BooleanConst Bool -- true
               | TableConst -- {}
               | NilConst -- nil
                  deriving (Show)
-              -- TODO: Function ? ... ? {...} ?
 
 -- A variable reference.
 newtype Variable = Variable String deriving (Eq, Ord, Show)
@@ -77,5 +83,8 @@ newtype Variable = Variable String deriving (Eq, Ord, Show)
 -- A block reference.
 type BlockReference = Int
 
+-- A function reference.
+type FunctionReference = Int
+
 -- A name.
-newtype Name = Name String deriving (Show)
+newtype Name = Name String deriving (Eq, Show)
