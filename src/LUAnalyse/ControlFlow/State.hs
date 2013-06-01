@@ -5,16 +5,18 @@ module LUAnalyse.ControlFlow.State where
 import Prelude hiding (lookup)
 import Control.Monad.State
 import Data.Map hiding (map, member)
+import Data.Maybe
 
 import LUAnalyse.ControlFlow.Flow
 
 -- Flow generation state.
+type Variables       = (Map String Variable, [Map String Variable])
 type BlockReferences = (BlockReference, BlockReference, BlockReference)
 type FlowState       = (
         Map FunctionReference Function,
         Map BlockReference Block,
         [Instruction],
-        Map String Variable,
+        Variables,
         Int,
         BlockReference,
         FunctionReference,
@@ -34,7 +36,7 @@ initialBlockRefs = (unavailableBlockRef, unavailableBlockRef, unavailableBlockRe
 
 -- Starting state.
 initialFlowState :: FlowState
-initialFlowState = (empty, empty, [], empty, 0, 0, 0, initialBlockRefs)
+initialFlowState = (empty, empty, [], (empty, []), 0, 0, 0, initialBlockRefs)
 
 -- Starts a function.
 startFunction :: State FlowState FlowState
@@ -49,8 +51,8 @@ startFunction = do
     return oldState
 
 -- Finishes a function.
-finishFunction :: FlowState -> BlockReference -> BlockReference -> [Variable] -> State FlowState FunctionReference
-finishFunction oldState entryBlockRef exitBlockRef params = do
+finishFunction :: FlowState -> BlockReference -> BlockReference -> [Variable] -> Variable -> State FlowState FunctionReference
+finishFunction oldState entryBlockRef exitBlockRef params retVar = do
     -- Fetch new state.
     newState <- get
     (functions, newBlocks, _, variables, varCounter, blockCounter, funcCounter, blockRefs) <- return newState
@@ -59,7 +61,7 @@ finishFunction oldState entryBlockRef exitBlockRef params = do
     (_, oldBlocks, instructions, _, _, _, _, blockRefs) <- return oldState
     
     -- Create function.
-    function <- return Function {flow = newBlocks, entry = entryBlockRef, exit = exitBlockRef, params = params}
+    function <- return Function {flow = newBlocks, entry = entryBlockRef, exit = exitBlockRef, params = params, returnVar = retVar}
     
     -- Add function.
     newFunctions <- return $ insert funcCounter function functions
@@ -152,36 +154,71 @@ finishBlock flowInstr = do
     put (functions, insert currentBlockRef block blocks, [], variables, varCounter, blockCounter, funcCounter, newBlockRefs)
     
     return currentBlockRef
-
--- Creates a variable alias.
-createVariableAlias :: String -> Variable -> State FlowState Variable
-createVariableAlias name var = do
+    
+-- Starts a variable scope.
+startScope :: State FlowState ()
+startScope = do
     (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
-    put (functions, blocks, instructions, insert name var variables, varCounter, blockCounter, funcCounter, blockRefs)
-    return var
+    (globals, scoped) <- return variables
+    
+    -- Add scope.
+    newVariables <- return (globals, empty : scoped)
+    
+    put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
+    return ()
 
--- Gets a variable by name. The variable will be created if it does not yet exist.
+-- Ends a scope.
+endScope :: State FlowState ()
+endScope = do
+    (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
+    (globals, scoped) <- return variables
+    
+    -- Remove scope.
+    newVariables <- return (globals, tail scoped)
+    
+    put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
+    return ()
+
+-- Gets a variable by name. The variable will be created as a global it does not yet exist.
 getVariable :: String -> State FlowState Variable
 getVariable name = do
     (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
-    case lookup name variables of
-        Just var -> do return var
-        Nothing -> do
-            put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
-            return newVar
-                where
-                    newVariables = insert name newVar variables
-                    newVar       = Variable name
+    (globals, scoped) <- return variables
+    
+    case catMaybes $ (map (lookup name) scoped) ++ [lookup name globals] of
+        (var:_) -> do return var
+        []      -> do
+                        newVar       <- return (Variable name)
+                        newVariables <- return (insert name newVar globals, scoped)
+                        put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
+                        return newVar
 
--- Looks up a variable by name.
-lookupVariable :: String -> State FlowState (Maybe Variable)
-lookupVariable name = do
-    (_, _, _, variables, _, _, _, _) <- get
-    return $ lookup name variables
+-- Creates a local variable.
+createVariable :: String -> State FlowState Variable
+createVariable name = do
+    (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
+    (globals, scoped) <- return variables
+    
+    -- Add variable.
+    newVarName   <- return $ '%' : show varCounter
+    newVar       <- return $ Variable newVarName
+    newVariables <- return (globals, (insert name newVar (head scoped)) : tail scoped)
+    
+    put (functions, blocks, instructions, newVariables, varCounter + 1, blockCounter, funcCounter, blockRefs)
+    return newVar
 
 -- Gets a new unique variable name.
 getNewVariable :: State FlowState Variable
 getNewVariable = do
     (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
-    put (functions, blocks, instructions, variables, varCounter + 1, blockCounter, funcCounter, blockRefs)
-    getVariable $ "%" ++ show varCounter
+    (globals, scoped) <- return variables
+    
+    -- Add global variable.
+    newVarName   <- return $ '%' : show varCounter
+    newVar       <- return (Variable newVarName)
+    newVariables <- return (insert newVarName newVar globals, scoped)
+    
+    put (functions, blocks, instructions, newVariables, varCounter + 1, blockCounter, funcCounter, blockRefs)
+    
+    return newVar
+

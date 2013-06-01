@@ -19,7 +19,7 @@ data InstructionLabel = InstructionLabel {block :: BlockReference, instructionIn
 data Program = Program {functions :: Map FunctionReference Function, start :: FunctionReference}
 
 -- A function.
-data Function = Function {flow :: Flow, entry :: BlockReference, exit :: BlockReference, params :: [Variable]}
+data Function = Function {flow :: Flow, entry :: BlockReference, exit :: BlockReference, params :: [Variable], returnVar :: Variable}
 
 -- The flow graph.
 type Flow = Map BlockReference Block
@@ -65,7 +65,7 @@ data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
 -- Flow instructions.
 data FlowInstruction = JumpInstr {target :: BlockReference} -- goto block
                      | CondJumpInstr {target :: BlockReference, alternative :: BlockReference, cond :: Variable} -- if (a) { goto block }
-                     | ReturnInstr {returnValue :: Variable} -- return
+                     | ReturnInstr -- return
                         deriving (Show)
 
 -- Constants.

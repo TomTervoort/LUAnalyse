@@ -14,8 +14,9 @@ formatControlFlow (Program {functions = functions}) = foldrWithKey f "" function
 
 -- Formats flow.
 formatFunction :: FunctionReference -> Function -> String
-formatFunction funcReference (Function {flow = flow, params = params}) = 
-    "function " ++ (show funcReference) ++ ":\n\targs = " ++ (show params) ++ "\n\n" ++ (foldrWithKey f "" flow)
+formatFunction funcReference (Function {flow = flow, params = params, returnVar = returnVar}) = 
+    "function " ++ (show funcReference) ++
+        ":\n\targs = " ++ (show params) ++ "\n\tretvar = " ++ (show returnVar) ++ "\n\n" ++ (foldrWithKey f "" flow)
         where
             f blockReference block acc = (formatBlock blockReference block) ++ acc
 

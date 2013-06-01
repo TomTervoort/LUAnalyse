@@ -1,18 +1,29 @@
-
-
+local c = 1
 
 a = function(a, b)
-    return a + b
+    return a + b + c
 end
+
+
+a = 2
+
+local a = 1
+
+a = 2
+
+
 
 
 --[[
 
 
+c,d=d,c
+
+
+
 TODO:
 
 -- "abc" --> "\"abc\""
--- x,y = y,x
 -- local vs global variables (make everything global)
 
 

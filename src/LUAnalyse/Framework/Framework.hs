@@ -7,7 +7,11 @@ module LUAnalyse.Framework.Framework (
                                         AnalysisType (..),
                                         AnalysisDirection (..),
                                         performAnalysis,
-                                        labelInstructions
+                                        
+                                        
+                                        labelInstructions,
+                                        nextInstructions,
+                                        edges
                                      ) where
 
 import LUAnalyse.Framework.Lattice
@@ -101,7 +105,7 @@ nextInstructions p (Just (InstructionLabel ref ind)) =
         case jump of
          JumpInstr x         -> firstIns' x
          CondJumpInstr a b _ -> firstIns' a ++ firstIns' b
-         ReturnInstr _       -> []
+         ReturnInstr         -> []
        firstIns' r = 
         case wholeFlow M.! r of
          Block [] j -> firstIns j
