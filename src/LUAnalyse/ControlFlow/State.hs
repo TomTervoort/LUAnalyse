@@ -10,10 +10,12 @@ import Data.Maybe
 import Data.Lens.Common
 import Data.Lens.Template
 
+import qualified Data.PartitionedSet as PS
+
 import LUAnalyse.ControlFlow.Flow
 
 -- Flow generation state.
-type Variables       = (Map String Variable, [Map String Variable])
+type Variables       = (PS.PartitionedSet Variable, [PS.PartitionedSet Variable])
 type BlockReferences = (BlockReference, BlockReference, BlockReference)
 
 data FlowState = FlowState
@@ -104,7 +106,7 @@ finishFunction oldState entryBlockRef exitBlockRef params retVar = do
     return thisFunction
 
 -- Appends an instruction.
-appendInstruction :: Instruction -> State FlowState Variable
+appendInstruction :: Instruction -> State FlowState ()
 appendInstruction instr = do
     modify (stInstructions ^%= (++[instr]))
     return $ var instr
@@ -157,7 +159,7 @@ setBreakBlockReference breakBlockRef = do
     setBlockReferences (currentBlockRef, exitBlockRef, breakBlockRef)
 
 -- Starts a block. Returns its reference.
-startBlock :: BlockReference -> State FlowState BlockReference
+startBlock :: BlockReference -> State FlowState ()
 startBlock blockRef = do
     s <- get
     let (_, exitBlockRef, breakBlockRef) = s ^. stBlockReferences
@@ -167,7 +169,7 @@ startBlock blockRef = do
     return blockRef
 
 -- Finishes a block. Returns its reference.
-finishBlock :: FlowInstruction -> State FlowState BlockReference
+finishBlock :: FlowInstruction -> State FlowState ()
 finishBlock flowInstr = do
     s <- get
     let (currentBlockRef, exitBlockRef, breakBlockRef) = s ^. stBlockReferences

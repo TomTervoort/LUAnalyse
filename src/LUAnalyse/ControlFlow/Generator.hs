@@ -11,6 +11,9 @@ import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.ControlFlow.State
 import qualified LUAnalyse.Parser.AST as Ast
 
+varToAstExpr :: Variable -> Ast.Expr
+varToAstExpr = Ast.VarExpr . Ast.Name . show
+
 -- Generates a control flow from an AST.
 generateControlFlow :: Ast.AST -> Program
 generateControlFlow ast
@@ -223,7 +226,7 @@ handleLocals :: [Ast.Name] -> [Ast.Expr] -> State FlowState ()
 handleLocals locals inits = do
     localVars <- mapM (\(Ast.Name name) -> createVariable name) locals
     
-    mapM_ (uncurry handleAssignment) $ zip (map (\(Variable name) -> Ast.VarExpr $ Ast.Name name) localVars) inits
+    mapM_ (uncurry handleAssignment) $ zip (map varToAstExpr localVars) inits
 
 -- Handles assignments.
 handleAssignments :: [Ast.Expr] -> [Ast.Expr] -> State FlowState ()
@@ -236,7 +239,7 @@ handleAssignments lhs rhs = do
     
     tempVars <- mapM assignTempVar exprVars
     
-    mapM_ (uncurry handleAssignment) $ zip lhs (map (\(Variable name) -> Ast.VarExpr $ Ast.Name name) tempVars)
+    mapM_ (uncurry handleAssignment) $ zip lhs (map varToAstExpr tempVars)
         where
             assignTempVar var = do
                 tempVar <- getNewVariable
@@ -394,60 +397,58 @@ handleBinaryOperator :: Ast.Expr -> Ast.Operator -> Ast.Expr -> State FlowState 
 handleBinaryOperator first (Ast.Operator op) second = do
     firstExpr  <- handleExpr first
     secondExpr <- handleExpr second
-    var        <- getNewVariable
+    var'       <- getNewVariable
     
-    appendInstruction $ opInstruction var firstExpr secondExpr
-    return var
+    appendInstruction $ opInstruction var' firstExpr secondExpr
+    return var'
         where
-            opInstruction var firstExpr secondExpr = case op of
-                "+" -> AddInstr {var = var, first = firstExpr, second = secondExpr}
-                "-" -> SubInstr {var = var, first = firstExpr, second = secondExpr}
-                "*" -> MulInstr {var = var, first = firstExpr, second = secondExpr}
-                "/" -> DivInstr {var = var, first = firstExpr, second = secondExpr}
-                "^" -> PowInstr {var = var, first = firstExpr, second = secondExpr}
-                "%" -> ModInstr {var = var, first = firstExpr, second = secondExpr}
+            opInstruction var' firstExpr secondExpr = case op of
+                "+" -> AddInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "-" -> SubInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "*" -> MulInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "/" -> DivInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "^" -> PowInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "%" -> ModInstr {var = var', lhs = firstExpr, rhs = secondExpr}
                 
-                ".." -> ConcatInstr {var = var, first = firstExpr, second = secondExpr}
+                ".." -> ConcatInstr {var = var', lhs = firstExpr, rhs = secondExpr}
                 
-                "==" -> EqInstr        {var = var, first = firstExpr, second = secondExpr}
-                "~=" -> NotEqInstr     {var = var, first = firstExpr, second = secondExpr}
-                "<"  -> LessInstr      {var = var, first = firstExpr, second = secondExpr}
-                ">"  -> GreaterInstr   {var = var, first = firstExpr, second = secondExpr}
-                "<=" -> LessEqInstr    {var = var, first = firstExpr, second = secondExpr}
-                ">=" -> GreaterEqInstr {var = var, first = firstExpr, second = secondExpr}
+                "==" -> EqInstr        {var = var', lhs = firstExpr, rhs = secondExpr}
+                "~=" -> NotEqInstr     {var = var', lhs = firstExpr, rhs = secondExpr}
+                "<"  -> LessInstr      {var = var', lhs = firstExpr, rhs = secondExpr}
+                ">"  -> GreaterInstr   {var = var', lhs = firstExpr, rhs = secondExpr}
+                "<=" -> LessEqInstr    {var = var', lhs = firstExpr, rhs = secondExpr}
+                ">=" -> GreaterEqInstr {var = var', lhs = firstExpr, rhs = secondExpr}
 
 -- Handles unary operators.
 handleUnaryOperator :: Ast.Operator -> Ast.Expr -> State FlowState Variable
 handleUnaryOperator (Ast.Operator op) expr = do
     exprVar <- handleExpr expr
-    var     <- getNewVariable
+    var'    <- getNewVariable
     
-    appendInstruction $ opInstruction var exprVar
-    return var
+    appendInstruction $ opInstruction var' exprVar
+    return var'
         where
-            opInstruction var exprVar = case op of
-                "-"   -> MinusInstr  {var = var, value = exprVar}
-                "not" -> NotInstr    {var = var, value = exprVar}
-                "#"   -> LengthInstr {var = var, value = exprVar}
+            opInstruction var' exprVar = case op of
+                "-"   -> MinusInstr  {var = var', value = exprVar}
+                "not" -> NotInstr    {var = var', value = exprVar}
+                "#"   -> LengthInstr {var = var', value = exprVar}
 
 -- Handles constants.
 handleConstant :: Constant -> State FlowState Variable
 handleConstant constant = do
-    var <- getNewVariable
-    appendInstruction $ ConstInstr {var = var, constant = constant}
-    return var
+    var' <- getNewVariable
+    appendInstruction $ ConstInstr {var = var', constant = constant}
+    return var'
 
 -- Handles table construction.
 handleConstructor :: [(Ast.Expr, Ast.Expr)] -> State FlowState Variable
 handleConstructor pairs = do
-    var <- getNewVariable
-    appendInstruction $ ConstInstr {var = var, constant = TableConst}
+    var' <- getNewVariable
+    appendInstruction $ ConstInstr {var = var', constant = TableConst}
     
-    case var of
-        (Variable varName) ->
-            mapM_ (\(key, value) -> handleAssignment (Ast.IndexExpr (Ast.VarExpr $ Ast.Name varName) key) value) pairs
+    mapM_ (\(key, v) -> handleAssignment (Ast.IndexExpr (varToAstExpr var') key) v) pairs
     
-    return var
+    return var'
 
 -- Post-processing:
 -- - Set constant flag for every instruction.
