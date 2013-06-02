@@ -52,11 +52,6 @@ class Lattice l => Analysis a l | a -> l where
  -- | Provides the type and direction of the analysis.
  analysisKind :: a -> (AnalysisType, AnalysisDirection)
 
- -- | Returns true if the transfer function is distrubitive, meaning @transfer a i (l1 `join` l2)
- --   == transfer a i l1 `join` transfer a i l2@. Default is @const False@.
- isDistributive :: a -> Bool
- isDistributive _ = False
-
  -- | The least informative value of the lattice. The default is top for must analyses, and bottom 
  --   for may analyses.
  least :: a -> l

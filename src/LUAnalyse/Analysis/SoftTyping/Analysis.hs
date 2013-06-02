@@ -244,5 +244,3 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
     transfer _ NotInstr     {..} = txOverwriteType var $ singleType Ty.Boolean
 
     analysisKind _ = (MayAnalysis, ForwardAnalysis)
-
-    -- TODO isDistributive?
