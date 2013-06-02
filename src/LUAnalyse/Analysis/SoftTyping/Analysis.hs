@@ -53,6 +53,10 @@ instance Lattice SoftTypingLattice where
     top = SoftTypingLatticeTop
     bottom = SoftTypingLattice M.empty
 
+-- | Set of non-function and non-table types.
+basicTypes :: LuaTypeSet
+basicTypes = LuaTypeSet [Ty.Nil, Ty.Boolean, Ty.Number, Ty.String]
+
 txOverwriteType :: Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
 txOverwriteType var types (SoftTypingLattice l) = SoftTypingLattice $ M.insert var types l
 txOverwriteType _ _ SoftTypingLatticeTop = SoftTypingLatticeTop -- TODO It's actually a semi-bound lattice...
@@ -66,8 +70,9 @@ txGetType var (SoftTypingLattice l) = M.findWithDefault top var l
 
 txConstrainEqualBaseTypes :: Variable -> Variable -> SoftTypingLattice -> SoftTypingLattice
 txConstrainEqualBaseTypes lhs rhs l
-  = let lhsTys = {- TODO convert to basic type -} txGetType lhs l
-        rhsTys = {- TODO convert to basic type -} txGetType rhs l
+        -- Note: intentionally no coercion!
+  = let lhsTys = txGetType lhs l `meet` basicTypes
+        rhsTys = txGetType rhs l `meet` basicTypes
         common = lhsTys `meet` rhsTys
     in txConstrainType lhs common . txConstrainType rhs common $ l
 
@@ -99,7 +104,7 @@ getTableMemberType :: TableType -> Ty.TableKey -> LuaTypeSet
 getTableMemberType tt key =
  case tt of
   TableTop                       -> top
-  TableBottom                    -> LuaTypeSet [Ty.Nil]
+  TableBottom                    -> singleType Ty.Nil
   TableCons (k,t) ts | k == key  -> t
                      | otherwise -> getTableMemberType ts key
 
@@ -161,7 +166,7 @@ luaConstantType TableConst = Ty.Table top
 luaConstantType NilConst = Ty.Nil
 
 singleType :: LuaType -> LuaTypeSet
-singleType = LuaTypeSet . (:[])
+singleType t = LuaTypeSet [t]
 
 assignmentTx var value l = txOverwriteType var (txGetType value l) l 
 numericArithTx var lhs rhs
@@ -234,7 +239,7 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
     transfer _ EqInstr      {..} = equalityTestTx var lhs rhs
     transfer _ NotEqInstr   {..} = equalityTestTx var lhs rhs
 
-    -- Given: both operand types are of equal type, and either a numbers or strings.
+    -- Given: both operand types are of equal type, and either numbers or strings.
     transfer _ LessInstr    {..} = orderingTestTx var lhs rhs
     transfer _ GreaterInstr {..} = orderingTestTx var lhs rhs
     transfer _ LessEqInstr  {..} = orderingTestTx var lhs rhs
