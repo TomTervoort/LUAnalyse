@@ -88,4 +88,4 @@ type BlockReference = Int
 type FunctionReference = Int
 
 -- A name.
-newtype Name = Name String deriving (Eq, Show)
+newtype Name = Name {unName :: String} deriving (Eq, Show)
