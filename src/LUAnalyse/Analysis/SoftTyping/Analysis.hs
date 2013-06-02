@@ -40,11 +40,11 @@ instance Lattice SoftTypingLattice where
 
     join SoftTypingLatticeTop _ = SoftTypingLatticeTop
     join _ SoftTypingLatticeTop = SoftTypingLatticeTop
-    join (SoftTypingLattice p) (SoftTypingLattice q) = SoftTypingLattice (M.union {-With meet-} p q)
-    
+    join (SoftTypingLattice p) (SoftTypingLattice q) = SoftTypingLattice (M.unionWith join p q)
+
     meet SoftTypingLatticeTop x = x
     meet x SoftTypingLatticeTop = x
-    meet (SoftTypingLattice p) (SoftTypingLattice q) = SoftTypingLattice (M.union {-With join-} p q)
+    meet (SoftTypingLattice p) (SoftTypingLattice q) = SoftTypingLattice (M.intersectionWith meet p q)
 
     top = SoftTypingLatticeTop
     bottom = SoftTypingLattice M.empty
@@ -96,7 +96,6 @@ orderingTestTx var lhs rhs
     . txConstrainType rhs (LuaTypeSet [Ty.Number, Ty.String])
 
 instance Analysis SoftTypingAnalysis SoftTypingLattice where
-    -- TODO
     transfer _ AssignInstr  {..} = assignmentTx var value
     transfer _ ConstInstr   {..} = txOverwriteType var (singleType . luaConstantType $ constant)
     
@@ -104,9 +103,9 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
     -- and ensure that argument types work
     transfer _ CallInstr    {..} = id
     -- [| var |] = number (nat!) (fin?), given [| value |] is a sequence-coercible type
-    transfer _ LengthInstr  {..} = id
+    transfer _ LengthInstr  {..} = txOverwriteType var (singleType Ty.Number)
     -- [| var |] = string, given [| lhs |], [| rhs |] both sequence-coercible
-    transfer _ ConcatInstr  {..} = id
+    transfer _ ConcatInstr  {..} = txOverwriteType var (singleType Ty.String)
 
     -- Given [| value |] < table, [| var |] = [| value.member |]
     transfer _ MemberInstr  {..} = id
@@ -141,13 +140,7 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
 
     -- Note: operands can be of any type; only false and nil are considered false.
     transfer _ NotInstr     {..} = txOverwriteType var $ singleType Ty.Boolean
-    {- TODO Not yet implemented in Flow
-    transfer _ AndInstr     {..} = txSetType val (lhs `join` rhs)
-    transfer _ OrInstr      {..} = txSetType val (lhs `join` rhs)
-    -}
 
     analysisKind _ = (MayAnalysis, ForwardAnalysis)
 
     -- TODO isDistributive?
-    
-    -- TODO least, extremal, combine, combinator
