@@ -1,0 +1,22 @@
+name:                LUAnalyse
+version:             0.1.0.0
+synopsis:            Soft-typing analysis of Lua programs
+author:              Gerben van Veenendaal, Tom Tervoort, Stijn van Drongelen
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable LUAnalyse
+  build-depends:
+    base >= 4 && < 6,
+    process ==1.1.*,
+    syb ==0.4.*,
+    mtl ==2.1.*,
+
+    containers,
+    directory ==1.2.*,
+    data-partition >= 0.2
+
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  -- other-modules:       
+

@@ -96,20 +96,23 @@ labelInstructions = functions >>> M.elems >>> map flow >>> M.unions >>> M.assocs
 nextInstructions :: Program -> Maybe InstructionLabel -> [InstructionLabel]
 nextInstructions p Nothing = 
   concatMap (\func -> nextInstructions p (Just $ InstructionLabel (entry func) (-1))) $ M.elems $ functions p
-nextInstructions p (Just (InstructionLabel ref ind)) =
- let Block ins jump = wholeFlow M.! ref
-  in if ind < length ins - 1
-      then [InstructionLabel ref (ind + 1)]
-      else firstIns jump
+nextInstructions p (Just (InstructionLabel ref ind))
+    = case ref `M.lookup` wholeFlow of
+        Nothing -> error "LUAnalyse.Framework#L101"
+        Just (Block ins jump)
+            | ind < length ins - 1 -> [InstructionLabel ref (ind + 1)]
+            | otherwise -> firstIns jump
+
  where firstIns jump = 
         case jump of
          JumpInstr x         -> firstIns' x
          CondJumpInstr a b _ -> firstIns' a ++ firstIns' b
          ReturnInstr         -> []
        firstIns' r = 
-        case wholeFlow M.! r of
-         Block [] j -> firstIns j
-         Block _ _  -> [InstructionLabel r 0]
+        case r `M.lookup` wholeFlow of
+         Nothing    -> error "LUAnalyse.Framework#L113"
+         Just (Block [] j) -> firstIns j
+         Just (Block _ _)  -> [InstructionLabel r 0]
        wholeFlow = M.unions $ map flow $ M.elems $ functions p
 
 -- | Provides the extremal labels of the program for a given direction.
@@ -143,7 +146,7 @@ performAnalysis a p = addExits $ mfp edges' initialState
        edges' = edges p adir
        graph = graphRep edges'
        instructions = labelInstructions p
-       outgoing l = [(l, l') | l' <- graph M.! l]
+       outgoing l = [(l, l') | l' <- maybe [] id $ l `M.lookup` graph]
        extremals = S.fromList $ extremalLabels p adir
        initialVal l | l `S.member` extremals = extremal a
                     | otherwise              = least a
@@ -161,7 +164,7 @@ performAnalysis a p = addExits $ mfp edges' initialState
                                                        $ M.insert l' (combine a ml' transferred) m
                          | otherwise = mfp ls m
         where transferred = trans (instructions M.! l) $ m M.! l
-              ml' = m M.! l'
+              ml' = maybe (error "LUAnalyse.Framework#L167") id  $ l' `M.lookup` m
 
        -- Performs the transfer function on each label once more to obtain the exit value along 
        -- with the entry value.

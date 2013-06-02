@@ -78,7 +78,14 @@ data Constant = FunctionConst FunctionReference -- function (a, b) ... end
                  deriving (Show)
 
 -- A variable reference.
-newtype Variable = Variable String deriving (Eq, Ord, Show)
+data Variable
+    = Variable String
+    | FreshVariable Int
+    deriving (Eq, Ord)
+
+instance Show Variable where
+    show (Variable x) = x
+    show (FreshVariable x) = '%' : show x
 
 -- A block reference.
 type BlockReference = Int

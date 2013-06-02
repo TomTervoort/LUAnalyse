@@ -10,6 +10,9 @@ import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.ControlFlow.State
 import qualified LUAnalyse.Parser.AST as Ast
 
+varToAstExpr :: Variable -> Ast.Expr
+varToAstExpr = Ast.VarExpr . Ast.Name . show
+
 -- Generates a control flow from an AST.
 generateControlFlow :: Ast.AST -> Program
 generateControlFlow ast = Program {functions = functions, start = start}
@@ -222,7 +225,7 @@ handleLocals :: [Ast.Name] -> [Ast.Expr] -> State FlowState ()
 handleLocals locals inits = do
     localVars <- mapM (\(Ast.Name name) -> createVariable name) locals
     
-    mapM_ (uncurry handleAssignment) $ zip (map (\(Variable name) -> Ast.VarExpr $ Ast.Name name) localVars) inits
+    mapM_ (uncurry handleAssignment) $ zip (map varToAstExpr localVars) inits
 
 -- Handles assignments.
 handleAssignments :: [Ast.Expr] -> [Ast.Expr] -> State FlowState ()
@@ -235,7 +238,7 @@ handleAssignments lhs rhs = do
     
     tempVars <- mapM assignTempVar exprVars
     
-    mapM_ (uncurry handleAssignment) $ zip lhs (map (\(Variable name) -> Ast.VarExpr $ Ast.Name name) tempVars)
+    mapM_ (uncurry handleAssignment) $ zip lhs (map varToAstExpr tempVars)
         where
             assignTempVar var = do
                 tempVar <- getNewVariable
@@ -442,9 +445,7 @@ handleConstructor pairs = do
     var <- getNewVariable
     appendInstruction $ ConstInstr {var = var, constant = TableConst}
     
-    case var of
-        (Variable varName) ->
-            mapM_ (\(key, value) -> handleAssignment (Ast.IndexExpr (Ast.VarExpr $ Ast.Name varName) key) value) pairs
+    mapM_ (\(key, value) -> handleAssignment (Ast.IndexExpr (varToAstExpr var) key) value) pairs
     
     return var
 

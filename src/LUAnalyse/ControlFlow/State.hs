@@ -7,10 +7,14 @@ import Control.Monad.State
 import Data.Map hiding (map, member)
 import Data.Maybe
 
+import qualified Data.PartitionedSet as PS
+import qualified Data.Partition as P
+import qualified Data.Set as S
+
 import LUAnalyse.ControlFlow.Flow
 
 -- Flow generation state.
-type Variables       = (Map String Variable, [Map String Variable])
+type Variables       = (PS.PartitionedSet Variable, [PS.PartitionedSet Variable])
 type BlockReferences = (BlockReference, BlockReference, BlockReference)
 type FlowState       = (
         Map FunctionReference Function,
@@ -36,7 +40,7 @@ initialBlockRefs = (unavailableBlockRef, unavailableBlockRef, unavailableBlockRe
 
 -- Starting state.
 initialFlowState :: FlowState
-initialFlowState = (empty, empty, [], (empty, []), 0, 0, 0, initialBlockRefs)
+initialFlowState = (empty, empty, [], (PS.empty, []), 0, 0, 0, initialBlockRefs)
 
 -- Starts a function.
 startFunction :: State FlowState FlowState
@@ -154,7 +158,7 @@ finishBlock flowInstr = do
     put (functions, insert currentBlockRef block blocks, [], variables, varCounter, blockCounter, funcCounter, newBlockRefs)
     
     return currentBlockRef
-    
+
 -- Starts a variable scope.
 startScope :: State FlowState ()
 startScope = do
@@ -162,7 +166,7 @@ startScope = do
     (globals, scoped) <- return variables
     
     -- Add scope.
-    newVariables <- return (globals, empty : scoped)
+    newVariables <- return (globals, PS.empty : scoped)
     
     put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
     return ()
@@ -185,11 +189,11 @@ getVariable name = do
     (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
     (globals, scoped) <- return variables
     
-    case catMaybes $ (map (lookup name) scoped) ++ [lookup name globals] of
+    case catMaybes . map (flip PS.mrep (Variable name)) $ scoped ++ [globals] of
         (var:_) -> do return var
         []      -> do
                         newVar       <- return (Variable name)
-                        newVariables <- return (insert name newVar globals, scoped)
+                        newVariables <- return (PS.insert newVar globals, scoped)
                         put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
                         return newVar
 
@@ -200,9 +204,8 @@ createVariable name = do
     (globals, scoped) <- return variables
     
     -- Add variable.
-    newVarName   <- return $ '%' : show varCounter
-    newVar       <- return $ Variable newVarName
-    newVariables <- return (globals, (insert name newVar (head scoped)) : tail scoped)
+    newVar       <- return $ FreshVariable varCounter
+    newVariables <- return (globals, (PS.insert newVar (head scoped)) : tail scoped)
     
     put (functions, blocks, instructions, newVariables, varCounter + 1, blockCounter, funcCounter, blockRefs)
     return newVar
@@ -214,9 +217,8 @@ getNewVariable = do
     (globals, scoped) <- return variables
     
     -- Add global variable.
-    newVarName   <- return $ '%' : show varCounter
-    newVar       <- return (Variable newVarName)
-    newVariables <- return (insert newVarName newVar globals, scoped)
+    newVar       <- return $ FreshVariable varCounter
+    newVariables <- return (PS.insert newVar globals, scoped)
     
     put (functions, blocks, instructions, newVariables, varCounter + 1, blockCounter, funcCounter, blockRefs)
     
