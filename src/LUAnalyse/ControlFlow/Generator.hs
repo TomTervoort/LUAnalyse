@@ -336,10 +336,9 @@ handleAndOperator first second = do
     appendInstruction $ AssignInstr {var = var, value = secondVar}
     finishBlock JumpInstr {target = endBlockRef}
     
-    -- Or set to false.
+    -- Otherwise, set to first value.
     startBlock secondBlockRef
-    falseVar <- handleConstant $ BooleanConst False
-    appendInstruction $ AssignInstr {var = var, value = falseVar}
+    appendInstruction $ AssignInstr {var = var, value = firstVar}
     finishBlock JumpInstr {target = endBlockRef}
     
     -- Start end block.
@@ -366,10 +365,9 @@ handleOrOperator first second = do
     appendInstruction $ AssignInstr {var = var, value = secondVar}
     finishBlock JumpInstr {target = endBlockRef}
     
-    -- Or set to true.
+    -- Otherwise, set to first value.
     startBlock secondBlockRef
-    trueVar <- handleConstant $ BooleanConst True
-    appendInstruction $ AssignInstr {var = var, value = trueVar}
+    appendInstruction $ AssignInstr {var = var, value = firstVar}
     finishBlock JumpInstr {target = endBlockRef}
     
     -- Start end block.
