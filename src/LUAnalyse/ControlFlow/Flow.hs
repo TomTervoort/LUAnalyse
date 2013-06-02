@@ -12,11 +12,11 @@ import Data.Map hiding (map, member)
 
 
 -- | A label through which an instruction within a program can be identified.
-data InstructionLabel = InstructionLabel {block :: BlockReference, instructionIndex :: Int}
+data InstructionLabel = InstructionLabel BlockReference Int
                          deriving (Eq, Ord, Show)
 
 -- A whole program.
-data Program = Program {functions :: Map FunctionReference Function, start :: FunctionReference}
+data Program = Program {allFunctions :: Map FunctionReference Function, start :: FunctionReference}
 
 -- A function.
 data Function = Function {flow :: Flow, entry :: BlockReference, exit :: BlockReference, params :: [Variable], returnVar :: Variable}
@@ -35,28 +35,28 @@ data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
                  -- Special operators.
                  | CallInstr {var :: Variable, method :: Variable, args :: [Variable]} -- a = b(c, d, e)
                  | LengthInstr {var :: Variable, value :: Variable} -- a = #b
-                 | ConcatInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b .. c
+                 | ConcatInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b .. c
                  | MemberInstr {var :: Variable, value :: Variable, member :: Name} -- a = b.name
                  | IndexInstr {var :: Variable, value :: Variable, index :: Variable} -- a = b[c]
                  | NewMemberInstr {var :: Variable, member :: Name, value :: Variable} -- a.name = b
                  | NewIndexInstr {var :: Variable, index :: Variable, value :: Variable} -- a[b] = c
                  
                  -- Arithmetic operators.
-                 | AddInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b + c
-                 | SubInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b - c
-                 | MulInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b * c
-                 | DivInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b / c
-                 | PowInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b ^ c
-                 | ModInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b % c
+                 | AddInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b + c
+                 | SubInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b - c
+                 | MulInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b * c
+                 | DivInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b / c
+                 | PowInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b ^ c
+                 | ModInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b % c
                  | MinusInstr {var :: Variable, value :: Variable} -- a = -b
                  
                  -- Relational operators.
-                 | EqInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b == c
-                 | NotEqInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b ~= c
-                 | LessInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b < c
-                 | GreaterInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b > c
-                 | LessEqInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b <= c
-                 | GreaterEqInstr {var :: Variable, first :: Variable, second :: Variable} -- a = b >= c
+                 | EqInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b == c
+                 | NotEqInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b ~= c
+                 | LessInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b < c
+                 | GreaterInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b > c
+                 | LessEqInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b <= c
+                 | GreaterEqInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b >= c
                  
                  -- Logical operators.
                  | NotInstr {var :: Variable, value :: Variable} -- a = not b

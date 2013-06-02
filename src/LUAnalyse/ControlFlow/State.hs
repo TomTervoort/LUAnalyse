@@ -8,8 +8,6 @@ import Data.Map hiding (map, member)
 import Data.Maybe
 
 import qualified Data.PartitionedSet as PS
-import qualified Data.Partition as P
-import qualified Data.Set as S
 
 import LUAnalyse.ControlFlow.Flow
 
@@ -62,7 +60,9 @@ finishFunction oldState entryBlockRef exitBlockRef params retVar = do
     (functions, newBlocks, _, variables, varCounter, blockCounter, funcCounter, blockRefs) <- return newState
     
     -- And old state.
-    (_, oldBlocks, instructions, _, _, _, _, blockRefs) <- return oldState
+    -- TODO: The original code reinstated the old `blockRefs`. I'm not convinced
+    --       that this is desirable.
+    (_, oldBlocks, instructions, _, _, _, _, _) <- return oldState
     
     -- Create function.
     function <- return Function {flow = newBlocks, entry = entryBlockRef, exit = exitBlockRef, params = params, returnVar = retVar}
@@ -77,11 +77,10 @@ finishFunction oldState entryBlockRef exitBlockRef params retVar = do
     return funcCounter
 
 -- Appends an instruction.
-appendInstruction :: Instruction -> State FlowState Variable
+appendInstruction :: Instruction -> State FlowState ()
 appendInstruction instr = do
     modify $ \ (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) ->
         (functions, blocks, instructions ++ [instr], variables, varCounter, blockCounter, funcCounter, blockRefs)
-    return $ var instr
 
 -- Gets a new block reference.
 getBlockReference :: State FlowState BlockReference
@@ -101,7 +100,6 @@ setBlockReferences :: BlockReferences -> State FlowState ()
 setBlockReferences blockRefs = do
     (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, _) <- get
     put (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs)
-    return ()
 
 -- Gets current block.
 getCurrentBlockReference :: State FlowState BlockReference
@@ -120,7 +118,6 @@ setExitBlockReference :: BlockReference -> State FlowState ()
 setExitBlockReference exitBlockRef = do
     (currentBlockRef, _, breakBlockRef) <- getBlockReferences
     setBlockReferences (currentBlockRef, exitBlockRef, breakBlockRef)
-    return ()
 
 -- Gets break block.
 getBreakBlockReference :: State FlowState BlockReference
@@ -133,21 +130,18 @@ setBreakBlockReference :: BlockReference -> State FlowState ()
 setBreakBlockReference breakBlockRef = do
     (currentBlockRef, exitBlockRef, _) <- getBlockReferences
     setBlockReferences (currentBlockRef, exitBlockRef, breakBlockRef)
-    return ()
 
 -- Starts a block. Returns its reference.
-startBlock :: BlockReference -> State FlowState BlockReference
+startBlock :: BlockReference -> State FlowState ()
 startBlock blockRef = do
     (functions, blocks, _, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
     (_, exitBlockRef, breakBlockRef) <- return blockRefs
     
     newBlockRefs <- return (blockRef, exitBlockRef, breakBlockRef)
     put (functions, blocks, [], variables, varCounter, blockCounter, funcCounter, newBlockRefs)
-    
-    return blockRef
 
 -- Finishes a block. Returns its reference.
-finishBlock :: FlowInstruction -> State FlowState BlockReference
+finishBlock :: FlowInstruction -> State FlowState ()
 finishBlock flowInstr = do
     (functions, blocks, instructions, variables, varCounter, blockCounter, funcCounter, blockRefs) <- get
     (currentBlockRef, exitBlockRef, breakBlockRef) <- return blockRefs
@@ -156,8 +150,6 @@ finishBlock flowInstr = do
     
     newBlockRefs <- return (unavailableBlockRef, exitBlockRef, breakBlockRef)
     put (functions, insert currentBlockRef block blocks, [], variables, varCounter, blockCounter, funcCounter, newBlockRefs)
-    
-    return currentBlockRef
 
 -- Starts a variable scope.
 startScope :: State FlowState ()
@@ -169,7 +161,6 @@ startScope = do
     newVariables <- return (globals, PS.empty : scoped)
     
     put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
-    return ()
 
 -- Ends a scope.
 endScope :: State FlowState ()
@@ -181,7 +172,6 @@ endScope = do
     newVariables <- return (globals, tail scoped)
     
     put (functions, blocks, instructions, newVariables, varCounter, blockCounter, funcCounter, blockRefs)
-    return ()
 
 -- Gets a variable by name. The variable will be created as a global it does not yet exist.
 getVariable :: String -> State FlowState Variable
@@ -190,7 +180,7 @@ getVariable name = do
     (globals, scoped) <- return variables
     
     case catMaybes . map (flip PS.mrep (Variable name)) $ scoped ++ [globals] of
-        (var:_) -> do return var
+        (v:_) -> do return v
         []      -> do
                         newVar       <- return (Variable name)
                         newVariables <- return (PS.insert newVar globals, scoped)

@@ -8,7 +8,7 @@ import Data.Map hiding (map, member)
 
 -- Formats flow.
 formatControlFlow :: Program -> String
-formatControlFlow (Program {functions = functions}) = foldrWithKey f "" functions
+formatControlFlow (Program {allFunctions = functions}) = foldrWithKey f "" functions
     where
         f reference function acc = (formatFunction reference function) ++ "\n" ++ acc
 

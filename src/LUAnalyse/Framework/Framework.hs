@@ -87,7 +87,7 @@ class Lattice l => Analysis a l | a -> l where
 
 -- | Fetch all instructions from a program as a mapping from labels.
 labelInstructions :: Program -> Map InstructionLabel Instruction
-labelInstructions = functions >>> M.elems >>> map flow >>> M.unions >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.fromList
+labelInstructions = allFunctions >>> M.elems >>> map flow >>> M.unions >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.fromList
  where blockLabels :: BlockReference -> Block -> [(InstructionLabel, Instruction)]
        blockLabels ref (Block is _) = [(InstructionLabel ref ind, ins) | (ind, ins) <- zip [0..] is]
 
@@ -95,7 +95,7 @@ labelInstructions = functions >>> M.elems >>> map flow >>> M.unions >>> M.assocs
 --   label.
 nextInstructions :: Program -> Maybe InstructionLabel -> [InstructionLabel]
 nextInstructions p Nothing = 
-  concatMap (\func -> nextInstructions p (Just $ InstructionLabel (entry func) (-1))) $ M.elems $ functions p
+  concatMap (\func -> nextInstructions p (Just $ InstructionLabel (entry func) (-1))) $ M.elems $ allFunctions p
 nextInstructions p (Just (InstructionLabel ref ind))
     = case ref `M.lookup` wholeFlow of
         Nothing -> error "LUAnalyse.Framework#L101"
@@ -113,7 +113,7 @@ nextInstructions p (Just (InstructionLabel ref ind))
          Nothing    -> error "LUAnalyse.Framework#L113"
          Just (Block [] j) -> firstIns j
          Just (Block _ _)  -> [InstructionLabel r 0]
-       wholeFlow = M.unions $ map flow $ M.elems $ functions p
+       wholeFlow = M.unions $ map flow $ M.elems $ allFunctions p
 
 -- | Provides the extremal labels of the program for a given direction.
 extremalLabels :: Program -> AnalysisDirection -> [InstructionLabel]

@@ -4,7 +4,6 @@ module LUAnalyse.ControlFlow.Generator(generateControlFlow) where
 
 import Prelude hiding (lookup)
 import Control.Monad.State
-import Data.Map hiding (map, member)
 
 import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.ControlFlow.State
@@ -15,9 +14,9 @@ varToAstExpr = Ast.VarExpr . Ast.Name . show
 
 -- Generates a control flow from an AST.
 generateControlFlow :: Ast.AST -> Program
-generateControlFlow ast = Program {functions = functions, start = start}
+generateControlFlow ast = Program {allFunctions = functions, start = start'}
     where
-        (start, (functions, _, _, _, _, _, _, _)) = runState (handleFunction [] ast) initialFlowState
+        (start', (functions, _, _, _, _, _, _, _)) = runState (handleFunction [] ast) initialFlowState
 
 -- Handles a function.
 handleFunction :: [Ast.Name] -> Ast.Block -> State FlowState FunctionReference
@@ -396,58 +395,58 @@ handleBinaryOperator :: Ast.Expr -> Ast.Operator -> Ast.Expr -> State FlowState 
 handleBinaryOperator first (Ast.Operator op) second = do
     firstExpr  <- handleExpr first
     secondExpr <- handleExpr second
-    var        <- getNewVariable
+    var'       <- getNewVariable
     
-    appendInstruction $ opInstruction var firstExpr secondExpr
-    return var
+    appendInstruction $ opInstruction var' firstExpr secondExpr
+    return var'
         where
-            opInstruction var firstExpr secondExpr = case op of
-                "+" -> AddInstr {var = var, first = firstExpr, second = secondExpr}
-                "-" -> SubInstr {var = var, first = firstExpr, second = secondExpr}
-                "*" -> MulInstr {var = var, first = firstExpr, second = secondExpr}
-                "/" -> DivInstr {var = var, first = firstExpr, second = secondExpr}
-                "^" -> PowInstr {var = var, first = firstExpr, second = secondExpr}
-                "%" -> ModInstr {var = var, first = firstExpr, second = secondExpr}
+            opInstruction var' firstExpr secondExpr = case op of
+                "+" -> AddInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "-" -> SubInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "*" -> MulInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "/" -> DivInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "^" -> PowInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                "%" -> ModInstr {var = var', lhs = firstExpr, rhs = secondExpr}
                 
-                ".." -> ConcatInstr {var = var, first = firstExpr, second = secondExpr}
+                ".." -> ConcatInstr {var = var', lhs = firstExpr, rhs = secondExpr}
                 
-                "==" -> EqInstr        {var = var, first = firstExpr, second = secondExpr}
-                "~=" -> NotEqInstr     {var = var, first = firstExpr, second = secondExpr}
-                "<"  -> LessInstr      {var = var, first = firstExpr, second = secondExpr}
-                ">"  -> GreaterInstr   {var = var, first = firstExpr, second = secondExpr}
-                "<=" -> LessEqInstr    {var = var, first = firstExpr, second = secondExpr}
-                ">=" -> GreaterEqInstr {var = var, first = firstExpr, second = secondExpr}
+                "==" -> EqInstr        {var = var', lhs = firstExpr, rhs = secondExpr}
+                "~=" -> NotEqInstr     {var = var', lhs = firstExpr, rhs = secondExpr}
+                "<"  -> LessInstr      {var = var', lhs = firstExpr, rhs = secondExpr}
+                ">"  -> GreaterInstr   {var = var', lhs = firstExpr, rhs = secondExpr}
+                "<=" -> LessEqInstr    {var = var', lhs = firstExpr, rhs = secondExpr}
+                ">=" -> GreaterEqInstr {var = var', lhs = firstExpr, rhs = secondExpr}
 
 -- Handles unary operators.
 handleUnaryOperator :: Ast.Operator -> Ast.Expr -> State FlowState Variable
 handleUnaryOperator (Ast.Operator op) expr = do
     exprVar <- handleExpr expr
-    var     <- getNewVariable
+    var'    <- getNewVariable
     
-    appendInstruction $ opInstruction var exprVar
-    return var
+    appendInstruction $ opInstruction var' exprVar
+    return var'
         where
-            opInstruction var exprVar = case op of
-                "-"   -> MinusInstr  {var = var, value = exprVar}
-                "not" -> NotInstr    {var = var, value = exprVar}
-                "#"   -> LengthInstr {var = var, value = exprVar}
+            opInstruction var' exprVar = case op of
+                "-"   -> MinusInstr  {var = var', value = exprVar}
+                "not" -> NotInstr    {var = var', value = exprVar}
+                "#"   -> LengthInstr {var = var', value = exprVar}
 
 -- Handles constants.
 handleConstant :: Constant -> State FlowState Variable
 handleConstant constant = do
-    var <- getNewVariable
-    appendInstruction $ ConstInstr {var = var, constant = constant}
-    return var
+    var' <- getNewVariable
+    appendInstruction $ ConstInstr {var = var', constant = constant}
+    return var'
 
 -- Handles table construction.
 handleConstructor :: [(Ast.Expr, Ast.Expr)] -> State FlowState Variable
 handleConstructor pairs = do
-    var <- getNewVariable
-    appendInstruction $ ConstInstr {var = var, constant = TableConst}
+    var' <- getNewVariable
+    appendInstruction $ ConstInstr {var = var', constant = TableConst}
     
-    mapM_ (\(key, value) -> handleAssignment (Ast.IndexExpr (varToAstExpr var) key) value) pairs
+    mapM_ (\(key, v) -> handleAssignment (Ast.IndexExpr (varToAstExpr var') key) v) pairs
     
-    return var
+    return var'
 
 -- Post-processing:
 -- - Set constant flag for every instruction.

@@ -16,7 +16,8 @@ executable LUAnalyse
     directory ==1.2.*,
     data-partition >= 0.2
 
-  hs-source-dirs:      src
-  main-is:             Main.hs
+  hs-source-dirs:       src
+  main-is:              Main.hs
+  ghc-options:          -Wall
   -- other-modules:       
 

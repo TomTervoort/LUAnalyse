@@ -6,7 +6,7 @@ import LUAnalyse.Parser.Parser
 import LUAnalyse.ControlFlow.Generator
 import LUAnalyse.ControlFlow.Formatter
 -- import LUAnalyse.ControlFlow.Resolver
-import LUAnalyse.Framework.Framework
+-- import LUAnalyse.Framework.Framework
 import LUAnalyse.Analysis.Constants
 
 {-
