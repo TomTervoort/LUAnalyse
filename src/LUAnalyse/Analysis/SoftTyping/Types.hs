@@ -3,6 +3,7 @@
 module LUAnalyse.Analysis.SoftTyping.Types where
 
 import LUAnalyse.Framework.Lattice
+import LUAnalyse.ControlFlow.Flow (Variable)
 
 import Utility (outerUnionWith)
 
@@ -12,7 +13,6 @@ import qualified Data.Set as S
 
 type LuaNumber = Double
 type LuaString = String
-type LuaVariable = String
 
 data LuaType
     = Nil
@@ -64,7 +64,7 @@ data FunctionType
     
 
 data FunctionEffects
-    = FunctionEffects (M.Map LuaVariable (LuaTypeSet {- type before -}, LuaTypeSet {- type after -}))
+    = FunctionEffects (M.Map Variable (LuaTypeSet {- type before -}, LuaTypeSet {- type after -}))
     | EffectTop
 
 -- | Indicates whether the first type is a 'subtype' of the second type. For table and function 

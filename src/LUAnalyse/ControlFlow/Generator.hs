@@ -309,7 +309,7 @@ handleExpr expr =
             argVars   <- mapM handleExpr arguments
             var       <- getNewVariable
             
-            appendInstruction $ CallInstr {var = var, method = methodVar, args = argVars}
+            appendInstruction $ CallInstr {var = var, func = methodVar, args = argVars}
             return var
         
         -- Closure.

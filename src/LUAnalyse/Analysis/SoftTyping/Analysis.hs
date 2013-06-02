@@ -86,7 +86,9 @@ txGetFunctionType var (SoftTypingLattice l) =
 -- | Executes the side-effects of a function upon the soft-typing lattice.
 runFunctionEffects :: FunctionEffects -> SoftTypingLattice -> SoftTypingLattice
 runFunctionEffects EffectTop = const bottom
-runFunctionEffects (FunctionEffects effs) = undefined -- TODO
+runFunctionEffects (FunctionEffects effs) = 
+ foldr (>>>) id [txConstrainType var before >>> txOverwriteType var after 
+                 | (var, (before, after)) <- M.assocs effs               ]
 
 
 luaConstantType :: Constant -> LuaType
