@@ -12,7 +12,7 @@ import LUAnalyse.ControlFlow.State
 import qualified LUAnalyse.Parser.AST as Ast
 
 varToAstExpr :: Variable -> Ast.Expr
-varToAstExpr = Ast.VarExpr . Ast.Name . show
+varToAstExpr (Variable x) = Ast.VarExpr . Ast.Name $ x
 
 -- Generates a control flow from an AST.
 generateControlFlow :: Ast.AST -> Program
