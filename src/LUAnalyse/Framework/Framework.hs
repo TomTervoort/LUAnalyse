@@ -87,7 +87,7 @@ class Lattice l => Analysis a l | a -> l where
 
 -- | Fetch all instructions from a program as a mapping from labels.
 labelInstructions :: Program -> Map InstructionLabel Instruction
-labelInstructions = allFunctions >>> M.elems >>> map flow >>> M.unions >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.fromList
+labelInstructions = functions >>> M.elems >>> map flow >>> M.unions >>> M.assocs >>> concatMap (uncurry blockLabels) >>> M.fromList
  where blockLabels :: BlockReference -> Block -> [(InstructionLabel, Instruction)]
        blockLabels ref (Block is _) = [(InstructionLabel ref ind, ins) | (ind, ins) <- zip [0..] is]
 
