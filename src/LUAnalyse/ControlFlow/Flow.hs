@@ -33,7 +33,8 @@ data Instruction = AssignInstr {var :: Variable, value :: Variable} -- a = b
                  | ConstInstr {var :: Variable, constant :: Constant} -- a = constant
 
                  -- Special operators.
-                 | CallInstr {var :: Variable, method :: Variable, args :: [Variable]} -- a = b(c, d, e)
+                 -- Note: functions with multiple return values are not supported.
+                 | CallInstr {var :: Variable, func :: Variable, args :: [Variable]} -- a = b(c, d, e)
                  | LengthInstr {var :: Variable, value :: Variable} -- a = #b
                  | ConcatInstr {var :: Variable, lhs :: Variable, rhs :: Variable} -- a = b .. c
                  | MemberInstr {var :: Variable, value :: Variable, member :: Name} -- a = b.name

@@ -177,4 +177,4 @@ performAnalysis a p = addExits $ mfp edges' initialState
         where transferral :: InstructionLabel -> l -> (l, l)
               transferral i l = maybe (error "LUAanlyse.Framework#L178") id $ do
                 i' <- i `M.lookup` instructions
-                return $ (l, trans i' l)
+                return (l, trans i' l)

@@ -6,12 +6,16 @@ module LUAnalyse.Analysis.SoftTyping.Analysis where
 import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.Framework.Framework
 import LUAnalyse.Framework.Lattice
-import LUAnalyse.Analysis.SoftTyping.Types (LuaType, LuaTypeSet (..))
+import LUAnalyse.Analysis.SoftTyping.Types (LuaType, LuaTypeSet (..), 
+                                            FunctionType (..), FunctionEffects (..))
+import qualified LUAnalyse.Analysis.SoftTyping.Types as Ty
 
 import Utility (outerUnionWith)
 
+import Data.Maybe
+import Control.Arrow
+import Control.Monad hiding (join)
 import qualified Data.Map as M
-import qualified LUAnalyse.Analysis.SoftTyping.Types as Ty
 
 data SoftTypingAnalysis = SoftTypingAnalysis
 data SoftTypingLattice
@@ -67,6 +71,24 @@ txConstrainEqualBaseTypes lhs rhs l
         common = lhsTys `meet` rhsTys
     in txConstrainType lhs common . txConstrainType rhs common $ l
 
+-- | Looks up a function type from the lattice. If the variable in question can not possibly
+--   be a function, Nothing is returned. If multiple function types are possible, then those 
+--   function types are joined togheter.
+txGetFunctionType :: Variable -> SoftTypingLattice -> Maybe FunctionType
+txGetFunctionType var (SoftTypingLattice l) =
+ do LuaTypeSet ts <- M.lookup var l
+    let fs = mapMaybe getFunc ts
+    guard $ not (null fs)
+    return $ union fs
+ where getFunc (Ty.Function f) = Just f
+       getFunc _            = Nothing
+
+-- | Executes the side-effects of a function upon the soft-typing lattice.
+runFunctionEffects :: FunctionEffects -> SoftTypingLattice -> SoftTypingLattice
+runFunctionEffects EffectTop = const bottom
+runFunctionEffects (FunctionEffects effs) = undefined -- TODO
+
+
 luaConstantType :: Constant -> LuaType
 luaConstantType (FunctionConst _ref) = Ty.Function top
 luaConstantType (NumberConst _value) = Ty.Number
@@ -99,9 +121,21 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
     transfer _ AssignInstr  {..} = assignmentTx var value
     transfer _ ConstInstr   {..} = txOverwriteType var (singleType . luaConstantType $ constant)
     
-    -- TODO [| var |] = [| return-of method |], given [| method |] < function,
-    -- and ensure that argument types work
-    transfer _ CallInstr    {..} = id
+    -- [| var |] = [| return-of func |], given [| func |] < function,
+    -- and ensure that argument types work, also apply effects
+    transfer _ CallInstr    {..} = \l -> 
+     case txGetFunctionType func l of
+      Just ft@(FunctionType ins [out] effs) | length ins == length args 
+       -> -- Constrain arguments with input types; var with output type; run side-effects.
+          -- Also fix func's type.
+              foldr (>>>) id (zipWith txConstrainType args ins) 
+          >>> txConstrainType var out
+          >>> runFunctionEffects effs
+          >>> txOverwriteType func (LuaTypeSet [Ty.Function ft])
+             $ l
+      _ -> -- All bets are off. We lost all information.
+           bottom
+
     -- [| var |] = number (nat!) (fin?), given [| value |] is a sequence-coercible type
     transfer _ LengthInstr  {..} = txOverwriteType var (singleType Ty.Number)
     -- [| var |] = string, given [| lhs |], [| rhs |] both sequence-coercible
