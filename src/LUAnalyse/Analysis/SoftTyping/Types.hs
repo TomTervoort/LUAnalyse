@@ -5,6 +5,8 @@ module LUAnalyse.Analysis.SoftTyping.Types where
 import LUAnalyse.Framework.Lattice
 
 import Data.List
+import qualified Data.Map as M
+import qualified Data.Set as S
 
 type LuaNumber = Double
 type LuaString = String
@@ -53,7 +55,7 @@ data FunctionType
     
 
 data FunctionEffects
-    = FunctionEffects [(LuaVariable, LuaTypeSet -> LuaTypeSet)]
+    = FunctionEffects (M.Map LuaVariable (LuaTypeSet {- type before -}, LuaTypeSet {- type after -}))
     | EffectTop
 
 -- | Indicates whether the first type is a 'subtype' of the second type. For table and function 
@@ -120,12 +122,66 @@ instance Lattice TableType where
 
 -- | Function lattice.
 instance Lattice FunctionType where
- (</) = undefined 
- join = undefined
- meet = undefined
+ _ </ FunctionTop = True
+ FunctionTop </ _ = False
+
+ FunctionType pIn pOut pEffects </ FunctionType qIn qOut qEffects
+    | length pIn <= length qIn, length pOut <= length qOut
+    , all id (zipWith (</) qIn pIn)     -- contravariant
+    , all id (zipWith (</) pOut qOut)   -- covariant
+    , pEffects </ qEffects
+    = True
+    | otherwise = False
+ join p q
+    | p </ q = p
+    | q </ p = q
+    | otherwise = bottom
+ meet p q
+    | p </ q = q
+    | q </ p = p
+    | otherwise = top
  bottom = FunctionType [] [] (FunctionEffects [])
  top = FunctionTop
 
+-- | Function effects lattice.
+instance Lattice FunctionEffects where
+ _ </ EffectTop = True
+ EffectTop </ _ = False
+
+ FunctionEffects ps </ FunctionEffects qs = isWeakSubmapOfBy cmpEffects ps qs
+  where
+    cmpEffects :: Maybe (LuaTypeSet, LuaTypeSet) -> Maybe (LuaTypeSet, LuaTypeSet) -> Bool
+    cmpEffects Nothing _ = True
+    cmpEffects _ Nothing = False
+    cmpEffects (Just (pBefore, pAfter)) (Just (qBefore, qAfter))
+        | qBefore </ pBefore    -- contravariant
+        , pAfter </ qAfter      -- covariant
+        = True
+        | otherwise
+        = False
+
+ join x EffectTop = x
+ join EffectTop x = x
+ join (FunctionEffects ps) (FunctionEffects qs) = FunctionEffects $ M.unionWith effJoin ps qs
+  where
+    effJoin :: (LuaTypeSet, LuaTypeSet) -> (LuaTypeSet, LuaTypeSet) -> (LuaTypeSet, LuaTypeSet)
+    effJoin (pBefore, pAfter) (qBefore, qAfter) = (pBefore `meet` qBefore, pAfter `join` qAfter)
+ 
+ meet _ EffectTop = EffectTop
+ meet EffectTop _ = EffectTop
+ meet (FunctionEffects ps) (FuncitonEffects qs) = FunctionEffecst $ M.unionWith effMeet ps qs
+  where
+    effMeet :: (LuaTypeSet, LuaTypeSet) -> (LuaTypeSet, LuaTypeSet) -> (LuaTypeSet, LuaTypeSet)
+    effMeet (pBefore, pAfter) (qBefore, qAfter) = (pBefore `join` qBefore, pAfter `meet` qAfter)
+
+ bottom = FunctionEffects []
+ top = EffectTop
+
+isWeakSubmapOfBy :: (Maybe v -> Maybe v -> Bool) -> M.Map k v -> M.Map k v -> Bool
+isWeakSubmapOfBy cmp lhs rhs
+    = S.all (uncurry cmp)
+    . S.map (\k -> lhs `M.lookup` k, rhs `M.lookup` k))
+    $ M.keys lhs `S.union` M.keys rhs
 
 -- | The Lua type set lattice.
 instance Lattice LuaTypeSet where
