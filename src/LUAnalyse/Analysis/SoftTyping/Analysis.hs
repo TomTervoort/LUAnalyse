@@ -53,10 +53,6 @@ instance Lattice SoftTypingLattice where
     top = SoftTypingLatticeTop
     bottom = SoftTypingLattice M.empty
 
--- | Set of non-function and non-table types.
-basicTypes :: LuaTypeSet
-basicTypes = LuaTypeSet [Ty.Nil, Ty.Boolean, Ty.Number, Ty.String]
-
 txOverwriteType :: Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
 txOverwriteType var types (SoftTypingLattice l) = SoftTypingLattice $ M.insert var types l
 txOverwriteType _ _ SoftTypingLatticeTop = SoftTypingLatticeTop -- TODO It's actually a semi-bound lattice...
@@ -68,13 +64,23 @@ txConstrainType _ _ SoftTypingLatticeTop = SoftTypingLatticeTop
 txGetType :: Variable -> SoftTypingLattice -> LuaTypeSet
 txGetType var (SoftTypingLattice l) = M.findWithDefault top var l
 
-txConstrainEqualBaseTypes :: Variable -> Variable -> SoftTypingLattice -> SoftTypingLattice
-txConstrainEqualBaseTypes lhs rhs l
-        -- Note: intentionally no coercion!
-  = let lhsTys = txGetType lhs l `meet` basicTypes
-        rhsTys = txGetType rhs l `meet` basicTypes
+-- | When we know that two variables can only be used in situations where they
+--   have the same type, we need to constrain their type sets by the greatest
+--   set they have in common. No coercion is implied.
+txConstrainEqualTypes :: Variable -> Variable -> SoftTypingLattice -> SoftTypingLattice
+txConstrainEqualTypes lhs rhs l
+  = let -- In case we keep track of more precise types, we need to simplify
+        -- the type sets, so that the notion of "compatible" types is not
+        -- limited by "having the same range of values".
+        lhsTys = simplifyTypeSet $ txGetType lhs l
+        rhsTys = simplifyTypeSet $ txGetType rhs l
         common = lhsTys `meet` rhsTys
     in txConstrainType lhs common . txConstrainType rhs common $ l
+
+-- | Erase precise information (like ranges or properties of values, besides
+--   types).
+simplifyTypeSet :: LuaTypeSet -> LuaTypeSet
+simplifyTypeSet = id
 
 -- | Looks up a function type from the lattice. If the variable in question can not possibly
 --   be a function, Nothing is returned. If multiple function types are possible, then those 
@@ -181,7 +187,7 @@ equalityTestTx var lhs rhs
 
 orderingTestTx var lhs rhs
     = txOverwriteType var (singleType Ty.Boolean)
-    . txConstrainEqualBaseTypes lhs rhs
+    . txConstrainEqualTypes lhs rhs
     . txConstrainType lhs (LuaTypeSet [Ty.Number, Ty.String])
     . txConstrainType rhs (LuaTypeSet [Ty.Number, Ty.String])
 
