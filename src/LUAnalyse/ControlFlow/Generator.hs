@@ -4,6 +4,7 @@ module LUAnalyse.ControlFlow.Generator(generateControlFlow) where
 
 import Prelude hiding (lookup)
 import Control.Monad.State
+import Data.Lens.Common
 import Data.Map hiding (map, member)
 
 import LUAnalyse.ControlFlow.Flow
@@ -12,9 +13,9 @@ import qualified LUAnalyse.Parser.AST as Ast
 
 -- Generates a control flow from an AST.
 generateControlFlow :: Ast.AST -> Program
-generateControlFlow ast = Program {functions = functions, start = start}
-    where
-        (start, (functions, _, _, _, _, _, _, _)) = runState (handleFunction [] ast) initialFlowState
+generateControlFlow ast
+  = let (start, result) = runState (handleFunction [] ast) initialFlowState
+    in Program {functions = result ^. stFunctions, start = start}
 
 -- Handles a function.
 handleFunction :: [Ast.Name] -> Ast.Block -> State FlowState FunctionReference
