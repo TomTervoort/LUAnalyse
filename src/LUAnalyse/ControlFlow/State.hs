@@ -178,18 +178,20 @@ finishBlock flowInstr = do
         $ s
 
 -- Starts a variable scope.
-startScope :: State FlowState ()
-startScope = do
-    s <- get
-    let (globals, scoped) = s ^. stVariables 
-    put $ stVariables ^= (globals, empty : scoped) $ s
-
--- Ends a scope.
-endScope :: State FlowState ()
-endScope = do
-    s <- get
-    let (globals, _ : scoped) = s ^. stVariables
-    put $ stVariables ^= (globals, scoped) $ s
+scoped :: State FlowState a -> State FlowState a
+scoped act = do
+    -- Introduce a new scope.
+    sBefore <- get
+    let (globals, scoped) = sBefore ^. stVariables 
+    put $ stVariables ^= (globals, empty : scoped) $ sBefore
+    -- Execute the action.
+    result <- act
+    -- Drop the introduced scope.
+    sAfter <- get
+    let (globals', _ : scoped') = sAfter ^. stVariables 
+    put $ stVariables ^= (globals, scoped) $ sAfter
+    -- Return the result of the scoped action.
+    return result
 
 -- Gets a variable by name. The variable will be created as a global it does not yet exist.
 getVariable :: String -> State FlowState Variable

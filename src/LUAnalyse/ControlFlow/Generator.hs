@@ -24,29 +24,29 @@ generateControlFlow ast
 handleFunction :: [Ast.Name] -> Ast.Block -> State FlowState FunctionReference
 handleFunction paramNames block = do
     oldState <- startFunction
-    startScope
-    
-    entryBlockRef <- getBlockReference
-    exitBlockRef  <- getBlockReference
-    
-    retVar <- createVariable "%retval"
-    
-    oldExitBlockReference <- getExitBlockReference
-    setExitBlockReference exitBlockRef
-    
-    params <- mapM (\(Ast.Name name) -> createVariable name) paramNames
-    
-    startBlock entryBlockRef
-    nilVar <- handleConstant NilConst
-    appendInstruction $ AssignInstr {var = retVar, value = nilVar}
-    handleBlock block
-    finishBlock JumpInstr {target = exitBlockRef}
-    
-    setExitBlockReference oldExitBlockReference
-    startBlock exitBlockRef
-    finishBlock ReturnInstr
-    
-    endScope
+    (entryBlockRef, exitBlockRef, params, retVar) <- scoped $ do
+        entryBlockRef <- getBlockReference
+        exitBlockRef  <- getBlockReference
+        
+        retVar <- createVariable "%retval"
+        
+        oldExitBlockReference <- getExitBlockReference
+        setExitBlockReference exitBlockRef
+        
+        params <- mapM (\(Ast.Name name) -> createVariable name) paramNames
+        
+        startBlock entryBlockRef
+        nilVar <- handleConstant NilConst
+        appendInstruction $ AssignInstr {var = retVar, value = nilVar}
+        handleBlock block
+        finishBlock JumpInstr {target = exitBlockRef}
+        
+        setExitBlockReference oldExitBlockReference
+        startBlock exitBlockRef
+        finishBlock ReturnInstr
+
+        return (entryBlockRef, exitBlockRef, params, retVar)
+
     finishFunction oldState entryBlockRef exitBlockRef params retVar
 
 -- Handles a block.
@@ -74,11 +74,8 @@ handleStatement statement =
         Ast.RepeatStatement {Ast.body = bodyBlock, Ast.condition = condition} ->
             handleRepeat bodyBlock condition 
             
-        Ast.DoStatement {Ast.body = bodyBlock} -> do
-            startScope
-            handleBlock bodyBlock
-            endScope
-            return ()
+        Ast.DoStatement {Ast.body = bodyBlock} ->
+            scoped (handleBlock bodyBlock)
         
         Ast.ReturnStatement {Ast.args = args} ->
             handleReturn args
@@ -102,10 +99,7 @@ handleReturn exprs = do
                       var     <- getVariable "%retval"
                       
                       appendInstruction $ AssignInstr {var = var, value = exprVar}
-                      return ()
-                      
-        []     -> do
-                      return ()
+        []     -> return ()
     
     exitBlockReference <- getExitBlockReference
     junkBlockRef <- getBlockReference
@@ -138,15 +132,11 @@ handleIf condition thenBlock elseBody = case elseBody of
         finishBlock CondJumpInstr {target = thenBlockRef, alternative = elseBlockRef, cond = condVar}
         
         startBlock thenBlockRef
-        startScope
-        handleBlock thenBlock
-        endScope
+        scoped (handleBlock thenBlock)
         finishBlock JumpInstr {target = endBlockRef}
         
         startBlock elseBlockRef
-        startScope
-        handleBlock elseBlock
-        endScope
+        scoped (handleBlock elseBlock)
         finishBlock JumpInstr {target = endBlockRef}
         
         startBlock endBlockRef
@@ -162,9 +152,7 @@ handleIf condition thenBlock elseBody = case elseBody of
         finishBlock CondJumpInstr {target = thenBlockRef, alternative = endBlockRef, cond = condVar}
         
         startBlock thenBlockRef
-        startScope
-        handleBlock thenBlock
-        endScope
+        scoped (handleBlock thenBlock)
         finishBlock JumpInstr {target = endBlockRef}
         
         startBlock endBlockRef
@@ -188,9 +176,7 @@ handleWhile condition bodyBlock = do
     finishBlock CondJumpInstr {target = bodyBlockRef, alternative = endBlockRef, cond = condVar}
     
     startBlock bodyBlockRef
-    startScope
-    handleBlock bodyBlock
-    endScope
+    scoped (handleBlock bodyBlock)
     finishBlock JumpInstr {target = condBlockRef}
     
     setBreakBlockReference oldBreakBlockReference
@@ -210,10 +196,9 @@ handleRepeat bodyBlock condition = do
     setBreakBlockReference endBlockRef
     
     startBlock bodyBlockRef
-    startScope
-    handleBlock bodyBlock
-    condVar <- handleExpr condition
-    endScope
+    condVar <- scoped $ do
+        handleBlock bodyBlock
+        handleExpr condition
     finishBlock CondJumpInstr {target = endBlockRef, alternative = bodyBlockRef, cond = condVar}
     
     setBreakBlockReference oldBreakBlockReference
