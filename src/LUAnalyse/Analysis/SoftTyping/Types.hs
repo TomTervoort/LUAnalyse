@@ -46,6 +46,7 @@ instance Lattice BoolPowerset where
     _ </ EmptyBool = False
     TrueAndFalse </ _ = False
     _ </ TrueAndFalse = True
+    _ </ _ = False
 
     join p q
         | p </ q = q
@@ -56,12 +57,53 @@ instance Lattice BoolPowerset where
         | q </ p = q
         | otherwise = bottom
 
+data StringLatticePoint = StringBottom | StringConstants (S.Set String) | StringTop
+    deriving (Eq, Show)
+
+maximumStringSetSize :: Int
+maximumStringSetSize = 1
+
+instance NFData StringLatticePoint where
+    rnf StringBottom = ()
+    rnf StringTop = ()
+    rnf (StringConstants x) = x `deepseq` ()
+
+instance Lattice StringLatticePoint where
+    top = StringTop
+    bottom = StringBottom
+    
+    StringBottom </ _ = True
+    _ </ StringBottom = False
+    StringTop </ _ = False
+    _ </ StringTop = True
+    StringConstants x </ StringConstants y = x `S.isSubsetOf` y
+
+    join StringTop _ = StringTop
+    join _ StringTop = StringTop
+    join StringBottom x = x
+    join x StringBottom = x
+    join (StringConstants x) (StringConstants y)
+      = let r = x `S.union` y
+        in if S.size r > maximumStringSetSize
+           then StringTop
+           else StringConstants r
+
+    meet StringTop x = x
+    meet x StringTop = x
+    meet StringBottom _ = StringBottom
+    meet _ StringBottom = StringBottom
+    meet (StringConstants x) (StringConstants y)
+      = let r = x `S.intersection` y
+        in if S.null r
+           then StringBottom
+           else StringConstants r
+
 -- | Product of lattice points for every Lua type.
 data LuaTypeSet = LuaTypeSet
     { _ltsNil       :: Bool
     , _ltsBoolean   :: BoolPowerset
     , _ltsNumber    :: Bool -- TODO small number of constants, naturality, integrality
-    , _ltsString    :: Bool -- TODO small number of constants
+    , _ltsString    :: StringLatticePoint
     , _ltsTable     :: TableType
     , _ltsFunction  :: FunctionType
     }
@@ -312,7 +354,7 @@ instance Show LuaTypeSet where
         [ determine ltsNil      "nil"
         , determine ltsBoolean  "boolean"
         , determine ltsNumber   "number"
-        , determine ltsString   "string"
+        , \ll -> Just . show $ ll ^. ltsString  -- determine ltsString   "string"
         , determine ltsTable    "table"
         , determine ltsFunction "function"
         ]
@@ -329,11 +371,6 @@ singleType Number       = ltsNumber   ^= top $ bottom
 singleType String       = ltsString   ^= top $ bottom
 singleType (Table t)    = ltsTable    ^= t   $ bottom
 singleType (Function t) = ltsFunction ^= t   $ bottom
-
--- TODO Really implement this soon, so that the `table.name` syntax gets
---      analysed properly.
-constantStringType :: String -> LuaTypeSet
-constantStringType _ = singleType String
 
 tableMemberType :: LuaTypeSet -> LuaTypeSet -> LuaTypeSet
 tableMemberType tab idx
@@ -369,6 +406,9 @@ constantTableKeysOf lt
             OnlyTrue -> [KBoolean True]
             OnlyFalse -> [KBoolean False]
             TrueAndFalse -> [KBoolean False, KBoolean True]
+        stringKeys = case lt ^. ltsString of
+            StringConstants x -> x
+            _ -> S.empty
     in boolKeys
 
 advanceTableType :: LuaTypeSet -> LuaTypeSet -> LuaTypeSet -> LuaTypeSet
@@ -397,7 +437,7 @@ advanceTableType tab idx val
 variableTableKeysOf :: LuaTypeSet -> S.Set VariableTableKey
 variableTableKeysOf l = S.fromList . catMaybes . map ($ l) $
     [ determine ltsNumber   VNumber
-    , determine ltsString   VString
+    , determineStrings
     , determine ltsTable    VTable
     , determine ltsFunction VFunction
     ]
@@ -406,3 +446,16 @@ variableTableKeysOf l = S.fromList . catMaybes . map ($ l) $
     determine f desc ll
         | ll ^. f </ bottom = Nothing
         | otherwise = Just desc
+
+    determineStrings :: LuaTypeSet -> Maybe VariableTableKey
+    determineStrings ll = case ll ^. ltsString of
+        StringTop -> Just VString
+        _ -> Nothing
+
+constantBooleanType :: Bool -> LuaTypeSet
+constantBooleanType v
+  = let vv = if v then OnlyTrue else OnlyFalse
+    in ltsBoolean ^= vv $ bottom
+
+constantStringType :: String -> LuaTypeSet
+constantStringType x = ltsString ^= StringConstants (S.singleton x) $ bottom

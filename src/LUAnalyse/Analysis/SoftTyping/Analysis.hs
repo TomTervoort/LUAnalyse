@@ -112,13 +112,13 @@ runFunctionEffects (FunctionEffects effs) =
                  | (var, (before, after)) <- M.assocs effs               ]
 
 
-luaConstantType :: Constant -> LuaType
-luaConstantType (FunctionConst _ref) = Ty.Function top
-luaConstantType (NumberConst _value) = Ty.Number
-luaConstantType (StringConst _value) = Ty.String
-luaConstantType (BooleanConst _value) = Ty.Boolean
-luaConstantType TableConst = Ty.Table top
-luaConstantType NilConst = Ty.Nil
+luaConstantType :: Constant -> LuaTypeSet
+luaConstantType (FunctionConst _ref) = singleType $ Ty.Function top
+luaConstantType (NumberConst _value) = singleType $ Ty.Number
+luaConstantType (StringConst value) = Ty.constantStringType value
+luaConstantType (BooleanConst value) = Ty.constantBooleanType value
+luaConstantType TableConst = singleType $ Ty.Table top
+luaConstantType NilConst = singleType $ Ty.Nil
 
 assignmentTx var value l = txOverwriteType var (txGetType value l) l 
 numericArithTx var lhs rhs
@@ -139,7 +139,7 @@ orderingTestTx var lhs rhs
 
 instance Analysis SoftTypingAnalysis SoftTypingLattice where
     transfer _ AssignInstr  {..} = assignmentTx var value
-    transfer _ ConstInstr   {..} = txOverwriteType var (singleType . luaConstantType $ constant)
+    transfer _ ConstInstr   {..} = txOverwriteType var (luaConstantType constant)
     
     -- [| var |] = [| return-of func |], given [| func |] < function,
     -- and ensure that argument types work, also apply effects
