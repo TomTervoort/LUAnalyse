@@ -9,6 +9,7 @@ import qualified LUAnalyse.ControlFlow.Flow as Flow
 import Prelude hiding (all, any, concat, foldr)
 import Utility (outerUnionWith)
 
+import Control.DeepSeq
 import Data.Foldable
 import Data.Lens.Common
 import Data.Lens.Template
@@ -47,6 +48,9 @@ data LuaTypeSet = LuaTypeSet
     }
     deriving Eq
 
+instance NFData LuaTypeSet where
+    rnf (LuaTypeSet x0 x1 x2 x3 x4 x5) = x0 `deepseq` x1 `deepseq` x2 `deepseq` x3 `deepseq` x4 `deepseq` x5 `deepseq` ()
+
 topLuaTypeSet :: LuaTypeSet
 topLuaTypeSet = LuaTypeSet top top top top top top
 
@@ -56,10 +60,14 @@ data TableType
         (M.Map ConstantTableKey LuaTypeSet)
         -- | Union of type sets for variable indices (with known types).
         (M.Map VariableTableKey LuaTypeSet)
+    | TableTop
     | TableBottom
         -- explicit bottom: value can't be of type 'table'
     deriving Eq
 
+instance NFData TableType where
+    rnf TableBottom = ()
+    rnf (TableType x0 x1) = x0 `deepseq` x1 `deepseq` ()
 
 data ConstantTableKey
     = KBoolean  Bool
@@ -67,8 +75,12 @@ data ConstantTableKey
     | KString   String -- number-coercible or not? length range?
     -- | KTable
     -- | KFunction
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Show)
 
+instance NFData ConstantTableKey where
+    rnf (KBoolean x0) = x0 `deepseq` ()
+    rnf (KNumber x0) = x0 `deepseq` ()
+    rnf (KString x0) = x0 `deepseq` ()
 
 data VariableTableKey
     = VBoolean
@@ -76,8 +88,14 @@ data VariableTableKey
     | VString
     | VTable
     | VFunction
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Show)
 
+instance NFData VariableTableKey where
+    rnf VBoolean = ()
+    rnf VNumber = ()
+    rnf VString = ()
+    rnf VTable = ()
+    rnf VFunction = ()
 
 constantTableKey :: Flow.Constant -> Maybe ConstantTableKey
 constantTableKey (Flow.BooleanConst v)  = Just $ KBoolean v
@@ -108,6 +126,15 @@ data FunctionEffects
     = FunctionEffects (M.Map Flow.Variable (LuaTypeSet {- type before -}, LuaTypeSet {- type after -}))
     | EffectTop
     deriving Eq
+
+instance NFData FunctionType where
+    rnf FunctionTop = ()
+    rnf FunctionBottom = ()
+    rnf (FunctionType x0 x1 x2) = x0 `deepseq` x1 `deepseq` x2 `deepseq` ()
+
+instance NFData FunctionEffects where
+    rnf EffectTop = ()
+    rnf (FunctionEffects x0) = x0 `deepseq` ()
 
 -- | Indicates whether the first type is a 'subtype' of the second type. For table and function 
 --   types, this is equivalent to (</). For other types, a `subType` b holds only if the types are
@@ -152,24 +179,32 @@ instance Ord LuaType where
 --   NOTE: assumes tables are sorted on keys. Make sure to maintain this invariant.
 instance Lattice TableType where
  TableBottom </ _ = True
- _ </ TableBottom = True
+ _ </ TableBottom = False
+ _ </ TableTop = True
+ TableTop </ _ = False
  TableType llc llv </ TableType rrc rrv
     = M.isSubmapOfBy (</) llc rrc
     && M.isSubmapOfBy (</) llv rrv
  join TableBottom x = x
  join x TableBottom = x
+ join TableTop _ = TableTop
+ join _ TableTop = TableTop
  join (TableType llc llv) (TableType rrc rrv)
     = TableType (M.unionWith join llc rrc) (M.unionWith join llv rrv)
  meet TableBottom _ = TableBottom
  meet _ TableBottom = TableBottom
+ meet TableTop x = x
+ meet x TableTop = x
  meet (TableType llc llv) (TableType rrc rrv)
     = TableType (M.intersectionWith meet llc rrc) (M.intersectionWith meet llv rrv)
  bottom = TableBottom
- top = let make vty mp = M.insert vty top mp
-           allVTypes = [VBoolean, VNumber, VString, VTable, VFunction]
-       in TableType M.empty (foldr make M.empty allVTypes)
+ top = TableTop
 
-
+unpackedTableTop :: TableType
+unpackedTableTop
+  = let make vty mp = M.insert vty top mp
+        allVTypes = [VBoolean, VNumber, VString, VTable, VFunction]
+    in force $ TableType M.empty (foldr make M.empty allVTypes)
 
 -- | Function lattice.
 instance Lattice FunctionType where
@@ -202,10 +237,8 @@ instance Lattice FunctionEffects where
  _ </ EffectTop = True
  EffectTop </ _ = False
 
- FunctionEffects ps </ FunctionEffects qs = outerUnionWith True accEffects ps qs
+ FunctionEffects ps </ FunctionEffects qs = all id $ outerUnionWith cmpEffects ps qs
   where
-    accEffects :: Maybe (LuaTypeSet, LuaTypeSet) -> Maybe (LuaTypeSet, LuaTypeSet) -> Bool -> Bool
-    accEffects ll rr acc = acc && cmpEffects ll rr
     cmpEffects :: Maybe (LuaTypeSet, LuaTypeSet) -> Maybe (LuaTypeSet, LuaTypeSet) -> Bool
     cmpEffects Nothing _ = True
     cmpEffects _ Nothing = False
@@ -236,7 +269,14 @@ instance Lattice FunctionEffects where
 -- | The Lua type set lattice.
 instance Lattice LuaTypeSet where
  LuaTypeSet x0 x1 x2 x3 x4 x5 </ LuaTypeSet y0 y1 y2 y3 y4 y5
-    = x0 </ y0 && x1 </ y1 && x2 </ y2 && x3 </ y3 && x4 </ y4 && x5 </ y5
+    = all id
+        [ {-# SCC x0 #-} x0 </ y0
+        , {-# SCC x1 #-} x1 </ y1
+        , {-# SCC x2 #-} x2 </ y2
+        , {-# SCC x3 #-} x3 </ y3
+        , {-# SCC x4 #-} x4 </ y4
+        , {-# SCC x5 #-} x5 </ y5
+        ]
  join (LuaTypeSet x0 x1 x2 x3 x4 x5) (LuaTypeSet y0 y1 y2 y3 y4 y5)
     = LuaTypeSet (x0 `join` y0) (x1 `join` y1) (x2 `join` y2)
                  (x3 `join` y3) (x4 `join` y4) (x5 `join` y5) 
@@ -284,16 +324,20 @@ tableMemberType tab idx
         vtypes, ctypes :: LuaTypeSet
         vtypes = foldl' (\acc k -> acc `join` tableVMemberType tab' k) bottom vkeys
         ctypes = foldl' (\acc k -> acc `join` tableKMemberType tab' k) bottom ckeys
-    in vtypes `join` ctypes
+        
+        mightBeNil = if S.null vkeys then bottom else singleType Nil
+    in force $ (vtypes `join` ctypes) `join` mightBeNil
   where
     tableKMemberType :: TableType -> ConstantTableKey -> LuaTypeSet
     tableKMemberType TableBottom _ = bottom
+    tableKMemberType TableTop _ = bottom
     tableKMemberType tt@(TableType cmap _) kidx
       = let vtype = tableVMemberType tt (vkeyOfCkey kidx)
         in M.findWithDefault vtype kidx cmap
 
     tableVMemberType :: TableType -> VariableTableKey -> LuaTypeSet
     tableVMemberType TableBottom _ = bottom
+    tableVMemberType TableTop _ = top
     tableVMemberType (TableType cmap vmap) vidx
       = let cmap' = M.mapKeysWith join vkeyOfCkey cmap
             bothMap = M.unionWith join vmap cmap'
@@ -321,7 +365,7 @@ advanceTableType tab idx val
           = let vmap' = M.insert k val vmap
             in TableType cmap vmap'
 
-    in ltsTable ^%= advance $ tab
+    in force $ ltsTable ^%= advance $ tab
 
 -- TODO Restructure this, so that variable keys are not build when we only have
 --      constant keys in the type set.

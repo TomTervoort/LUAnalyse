@@ -2,6 +2,7 @@
 
 module LUAnalyse.ControlFlow.Flow where
 
+import Control.DeepSeq
 import Data.Map hiding (map, member)
 
 -- | Representation of a Lua program. Contains a program flow and denotes through which block in 
@@ -80,6 +81,9 @@ data Constant = FunctionConst FunctionReference -- function (a, b) ... end
 
 -- A variable reference.
 newtype Variable = Variable String deriving (Eq, Ord, Show)
+
+instance NFData Variable where
+    rnf (Variable x) = x `deepseq` ()
 
 -- A block reference.
 type BlockReference = Int

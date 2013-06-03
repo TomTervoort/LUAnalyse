@@ -14,6 +14,9 @@ import qualified LUAnalyse.Analysis.SoftTyping.Types as Ty
 
 import Utility (outerUnionWith)
 
+import Prelude hiding (all, foldr)
+import Data.Foldable
+
 import Data.Lens.Common
 import Control.Arrow
 import qualified Data.Map as M
@@ -35,13 +38,12 @@ instance Lattice SoftTypingLattice where
     _ </ SoftTypingLatticeTop = True
     SoftTypingLatticeTop </ _ = False
 
-    SoftTypingLattice p </ SoftTypingLattice q = outerUnionWith True stlLeq q p
+    SoftTypingLattice p </ SoftTypingLattice q = all id $ outerUnionWith stlLeq q p
       where
-        stlLeq :: Maybe LuaTypeSet -> Maybe LuaTypeSet -> Bool -> Bool
-        stlLeq _ _ False = False
-        stlLeq Nothing _ _ = False
-        stlLeq _ Nothing _ = True
-        stlLeq (Just qq) (Just pp) _ = qq </ pp
+        stlLeq :: Maybe LuaTypeSet -> Maybe LuaTypeSet -> Bool
+        stlLeq Nothing _ = False
+        stlLeq _ Nothing = True
+        stlLeq (Just qq) (Just pp) = qq </ pp
 
     join SoftTypingLatticeTop _ = SoftTypingLatticeTop
     join _ SoftTypingLatticeTop = SoftTypingLatticeTop
