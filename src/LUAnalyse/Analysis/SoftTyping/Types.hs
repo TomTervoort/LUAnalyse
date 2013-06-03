@@ -29,18 +29,37 @@ data LuaType
     -- | Thread
     -- | UserData
 
-instance Show LuaType where
-    show Nil = "nil"
-    show Boolean = "boolean"
-    show Number = "number"
-    show String = "string"
-    show (Table _) = "{}"
-    show (Function _) = "function"
+data BoolPowerset = EmptyBool | OnlyTrue | OnlyFalse | TrueAndFalse
+    deriving Eq
+
+instance NFData BoolPowerset where
+    rnf EmptyBool = ()
+    rnf OnlyTrue = ()
+    rnf OnlyFalse = ()
+    rnf TrueAndFalse = ()
+
+instance Lattice BoolPowerset where
+    top = TrueAndFalse
+    bottom = EmptyBool
+
+    EmptyBool </ _ = True
+    _ </ EmptyBool = False
+    TrueAndFalse </ _ = False
+    _ </ TrueAndFalse = True
+
+    join p q
+        | p </ q = q
+        | q </ p = p
+        | otherwise = top
+    meet p q
+        | p </ q = p
+        | q </ p = q
+        | otherwise = bottom
 
 -- | Product of lattice points for every Lua type.
 data LuaTypeSet = LuaTypeSet
     { _ltsNil       :: Bool
-    , _ltsBoolean   :: Bool -- TODO powerset(Bool)
+    , _ltsBoolean   :: BoolPowerset
     , _ltsNumber    :: Bool -- TODO small number of constants, naturality, integrality
     , _ltsString    :: Bool -- TODO small number of constants
     , _ltsTable     :: TableType
@@ -344,7 +363,13 @@ tableMemberType tab idx
         in M.findWithDefault (singleType Nil) vidx bothMap
 
 constantTableKeysOf :: LuaTypeSet -> S.Set ConstantTableKey
-constantTableKeysOf _ = S.empty
+constantTableKeysOf lt
+  = let boolKeys = S.fromList $ case lt ^. ltsBoolean of
+            EmptyBool -> []
+            OnlyTrue -> [KBoolean True]
+            OnlyFalse -> [KBoolean False]
+            TrueAndFalse -> [KBoolean False, KBoolean True]
+    in boolKeys
 
 advanceTableType :: LuaTypeSet -> LuaTypeSet -> LuaTypeSet -> LuaTypeSet
 advanceTableType tab idx val
@@ -371,8 +396,7 @@ advanceTableType tab idx val
 --      constant keys in the type set.
 variableTableKeysOf :: LuaTypeSet -> S.Set VariableTableKey
 variableTableKeysOf l = S.fromList . catMaybes . map ($ l) $
-    [ determine ltsBoolean  VBoolean
-    , determine ltsNumber   VNumber
+    [ determine ltsNumber   VNumber
     , determine ltsString   VString
     , determine ltsTable    VTable
     , determine ltsFunction VFunction
