@@ -21,7 +21,6 @@ import Control.Arrow
 import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Set (Set)
 import qualified Data.Set as S
 
 -- | Denotes the direction of analysis: either forward or backwards.
@@ -90,7 +89,7 @@ labelInstructions = functions >>> M.elems >>> map flow >>> M.unions >>> M.assocs
 --   label.
 nextInstructions :: Program -> Maybe InstructionLabel -> [InstructionLabel]
 nextInstructions p Nothing = 
-  concatMap (\func -> nextInstructions p (Just $ InstructionLabel (entry func) (-1))) $ M.elems $ functions p
+  concatMap (\fun -> nextInstructions p (Just $ InstructionLabel (entry fun) (-1))) $ M.elems $ functions p
 nextInstructions p (Just (InstructionLabel ref ind))
     = case fromMaybe (error "LUAnalyse.Framework#L95") $ ref `M.lookup` wholeFlow of
         Block ins jump
