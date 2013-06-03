@@ -131,6 +131,9 @@ instance NFData TableType where
     rnf TableTop = ()
     rnf (TableType x0 x1) = x0 `deepseq` x1 `deepseq` ()
 
+emptyTableType :: TableType
+emptyTableType = TableType M.empty M.empty
+
 data ConstantTableKey
     = KBoolean  Bool
     | KNumber   Double -- range? integral?

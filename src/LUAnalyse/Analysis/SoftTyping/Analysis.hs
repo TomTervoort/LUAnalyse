@@ -114,11 +114,11 @@ runFunctionEffects (FunctionEffects effs) =
 
 luaConstantType :: Constant -> LuaTypeSet
 luaConstantType (FunctionConst _ref) = singleType $ Ty.Function top
-luaConstantType (NumberConst _value) = singleType $ Ty.Number
+luaConstantType (NumberConst _value) = singleType Ty.Number
 luaConstantType (StringConst value) = Ty.constantStringType value
 luaConstantType (BooleanConst value) = Ty.constantBooleanType value
-luaConstantType TableConst = singleType $ Ty.Table top
-luaConstantType NilConst = singleType $ Ty.Nil
+luaConstantType TableConst = singleType $ Ty.Table Ty.emptyTableType
+luaConstantType NilConst = singleType Ty.Nil
 
 assignmentTx var value l = txOverwriteType var (txGetType value l) l 
 numericArithTx var lhs rhs
