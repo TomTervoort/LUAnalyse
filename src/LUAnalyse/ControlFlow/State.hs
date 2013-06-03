@@ -5,7 +5,7 @@ module LUAnalyse.ControlFlow.State where
 
 import Prelude hiding (lookup)
 import Control.Monad.State
-import Data.Map hiding (map, member)
+import Data.Map hiding (map, member, mapMaybe)
 import Data.Maybe
 import Data.Lens.Common
 import Data.Lens.Template
@@ -199,7 +199,7 @@ getVariable name = do
     s <- get
     let (globals, scoped) = s ^. stVariables
 
-    case catMaybes . map (lookup name) $ scoped ++ [globals] of
+    case mapMaybe (lookup name) $ scoped ++ [globals] of
         (var:_) -> return var
         []      -> do
             let newVar = Variable name

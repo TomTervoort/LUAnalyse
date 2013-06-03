@@ -51,8 +51,7 @@ handleFunction paramNames block = do
 
 -- Handles a block.
 handleBlock :: Ast.Block -> State FlowState ()
-handleBlock (Ast.StatList statements) = do
-    mapM_ handleStatement statements
+handleBlock (Ast.StatList statements) = mapM_ handleStatement statements
 
 -- Handles a statement.
 handleStatement :: Ast.Statement -> State FlowState ()
