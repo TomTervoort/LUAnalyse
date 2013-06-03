@@ -192,6 +192,7 @@ handleStatement = function(stat)
 		args = {handleBlock(stat.Body), handleExpr(stat.Condition)}
 
 	elseif stat.AstType == 'Function' then
+	    ctor = 'FunctionDecl'
 		args = {
 			(stat.IsLocal and 'True') or 'False',
 			stat.Name.Name,

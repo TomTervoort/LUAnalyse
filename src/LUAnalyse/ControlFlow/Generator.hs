@@ -83,8 +83,13 @@ handleStatement statement =
         
         Ast.LocalStatement {Ast.locals = locals, Ast.inits = inits} ->
             handleLocals locals inits
-            
-        -- Ast.FunctionDecl {isLocal :: Bool, name :: Name, argList :: [Name], body :: Block}
+
+        Ast.FunctionDecl {Ast.isLocal = isLocal, Ast.name = name, Ast.argList = argList, Ast.body = body} ->
+            let funExpr = Ast.FunctionExpr argList body
+            in if isLocal
+               then handleLocals [name] [funExpr]
+               else handleAssignments [Ast.VarExpr name] [funExpr]
+
         -- Ast.GenericForStatement {vars :: [Name], generators :: [Expr], body :: Block}
         -- Ast.NumericForStatement {var :: Name, start :: Expr, end :: Expr, step :: Maybe Expr, body :: Block}
 
