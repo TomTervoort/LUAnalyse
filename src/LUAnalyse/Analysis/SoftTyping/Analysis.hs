@@ -6,12 +6,15 @@ module LUAnalyse.Analysis.SoftTyping.Analysis where
 import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.Framework.Framework
 import LUAnalyse.Framework.Lattice
-import LUAnalyse.Analysis.SoftTyping.Types (LuaType, LuaTypeSet (..), TableType (..),
-                                            FunctionType (..), FunctionEffects (..))
+import LUAnalyse.Analysis.SoftTyping.Types
+    (LuaType, LuaTypeSet (..), TableType (..)
+    , FunctionType (..), FunctionEffects (..)
+    , singleType)
 import qualified LUAnalyse.Analysis.SoftTyping.Types as Ty
 
 import Utility (outerUnionWith)
 
+import Data.Lens.Common
 import Data.Maybe
 import Control.Arrow
 import Control.Monad hiding (join)
@@ -61,6 +64,9 @@ txConstrainType :: Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLatt
 txConstrainType var types lat@(SoftTypingLattice l) = SoftTypingLattice $ M.insert var (types `meet` (txGetType var lat)) l
 txConstrainType _ _ SoftTypingLatticeTop = SoftTypingLatticeTop
 
+txNotNil :: Variable -> SoftTypingLattice -> SoftTypingLattice
+txNotNil var = txConstrainType var (Ty.ltsNil ^= bottom $ top)
+
 txGetType :: Variable -> SoftTypingLattice -> LuaTypeSet
 txGetType var (SoftTypingLattice l) = M.findWithDefault top var l
 
@@ -82,78 +88,20 @@ txConstrainEqualTypes lhs rhs l
 simplifyTypeSet :: LuaTypeSet -> LuaTypeSet
 simplifyTypeSet = id
 
--- | Looks up a function type from the lattice. If the variable in question can not possibly
---   be a function, Nothing is returned. If multiple function types are possible, then those 
---   function types are joined togheter.
-txGetFunctionType :: Variable -> SoftTypingLattice -> Maybe FunctionType
-txGetFunctionType var (SoftTypingLattice l) =
- do LuaTypeSet ts <- M.lookup var l
-    let fs = mapMaybe getFunc ts
-    guard $ not (null fs)
-    return $ union fs
- where getFunc (Ty.Function f) = Just f
-       getFunc _            = Nothing
+txReadTable :: Variable -> Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
+txReadTable var tab key l
+  = let tableType = txGetType tab l
+    in    txOverwriteType var (Ty.tableMemberType tableType key)
+        . txConstrainType tab (singleType $ Ty.Table top)
+        $ l
 
--- | Look up the type of a table. Nothing is returned if the variable in question can not possibly 
---   be a table. If multiple tables are possible, their union is returned.
-txGetTableType :: Variable -> SoftTypingLattice -> Maybe TableType
-txGetTableType var (SoftTypingLattice l) = 
- do LuaTypeSet ts <- M.lookup var l
-    let tas = mapMaybe getTable ts
-    guard $ not (null ts)
-    return $ union tas
- where getTable (Ty.Table t) = Just t
-       getTable _            = Nothing
-
--- | Looks up the type of a table member. Unnassigned members are considered nil.
-getTableMemberType :: TableType -> Ty.TableKey -> LuaTypeSet
-getTableMemberType tt key =
- case tt of
-  TableTop                       -> top
-  TableBottom                    -> singleType Ty.Nil
-  TableCons (k,t) ts | k == key  -> t
-                     | otherwise -> getTableMemberType ts key
-
--- | Returns the updated type of a table of which a member has been assigned with a new type.
-setTableMemberType :: TableType -> Ty.TableKey -> LuaTypeSet -> TableType
-setTableMemberType tt key new =
- case tt of
-  c@(TableCons (k, t) ts) -> case compare k key of
-                              EQ -> TableCons (key, new) ts
-                              LT -> TableCons (k, t) $ setTableMemberType ts key new
-                              GT -> TableCons (key, new) c
-  end                     -> TableCons (key, new) end
-
-setTableUnkownIndexType :: TableType -> LuaTypeSet -> TableType
-setTableUnkownIndexType tt ty =
- case tt of
-  TableCons (k,t) ts -> TableCons (k, t `join` ty) $ setTableUnkownIndexType ts ty
-  TableBottom        -> TableTop
-  TableTop           -> TableTop
-
--- | Combines txGetTableType and getTableMemberType. Returns bottom if the variable can not be a
---   table.
-txGetTableMemberType :: Variable -> Ty.TableKey -> SoftTypingLattice -> LuaTypeSet
-txGetTableMemberType var key l = maybe bottom (flip getTableMemberType key) $ txGetTableType var l
-
--- | Sets or overwrites the type of a table member.
---   TODO: current behavior when var is no table: first create a new empty table. This is probably
---         undesired, but how else should this be handled?
-txSetTableMemberType :: Variable -> Ty.TableKey -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
-txSetTableMemberType var key val l = 
- let oldTable = fromMaybe bottom (txGetTableType var l)
-     newTable = setTableMemberType oldTable key val
-  in txOverwriteType var (singleType $ Ty.Table newTable) l
-
--- | Indicates that a table member should have a particular type, but without knowing which table 
---   member. This will join the type in question with all existing member types and make sure the
---   table ends with top.
-txAddUnkownIndexType :: Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
-txAddUnkownIndexType var val l =
- let oldTable = fromMaybe bottom (txGetTableType var l)
-     newTable = setTableUnkownIndexType oldTable val
-  in txOverwriteType var (singleType $ Ty.Table newTable) l
-
+txWriteTable :: Variable -> Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
+txWriteTable var tab key l
+  = let tableType = txGetType tab l
+        varType = txGetType var l
+    in    txOverwriteType tab (Ty.advanceTableType tableType key varType)
+        . txConstrainType tab (singleType $ Ty.Table top)
+        $ l
 
 -- | Executes the side-effects of a function upon the soft-typing lattice.
 runFunctionEffects :: FunctionEffects -> SoftTypingLattice -> SoftTypingLattice
@@ -171,9 +119,6 @@ luaConstantType (BooleanConst _value) = Ty.Boolean
 luaConstantType TableConst = Ty.Table top
 luaConstantType NilConst = Ty.Nil
 
-singleType :: LuaType -> LuaTypeSet
-singleType t = LuaTypeSet [t]
-
 assignmentTx var value l = txOverwriteType var (txGetType value l) l 
 numericArithTx var lhs rhs
     = txOverwriteType var (singleType Ty.Number)
@@ -188,8 +133,8 @@ equalityTestTx var lhs rhs
 orderingTestTx var lhs rhs
     = txOverwriteType var (singleType Ty.Boolean)
     . txConstrainEqualTypes lhs rhs
-    . txConstrainType lhs (LuaTypeSet [Ty.Number, Ty.String])
-    . txConstrainType rhs (LuaTypeSet [Ty.Number, Ty.String])
+    . txConstrainType lhs (singleType Ty.Number `join` singleType Ty.String)
+    . txConstrainType rhs (singleType Ty.Number `join` singleType Ty.String)
 
 instance Analysis SoftTypingAnalysis SoftTypingLattice where
     transfer _ AssignInstr  {..} = assignmentTx var value
@@ -198,8 +143,8 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
     -- [| var |] = [| return-of func |], given [| func |] < function,
     -- and ensure that argument types work, also apply effects
     transfer _ CallInstr    {..} = \l -> 
-     case txGetFunctionType func l of
-      Just ft@(FunctionType ins [out] effs) | length ins == length args 
+     case txGetType func l ^. Ty.ltsFunction of
+      ft@(FunctionType ins [out] effs) | length ins == length args 
        -> -- Constrain arguments with input types; var with output type; run side-effects.
           -- Also fix func's type.
               foldr (>>>) id (zipWith txConstrainType args ins) 
@@ -207,7 +152,9 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
           >>> runFunctionEffects effs
           >>> txOverwriteType func (singleType $ Ty.Function ft)
              $ l
-      _ -> bottom -- All bets are off. We lost all information.
+      FunctionBottom -> bottom -- The can't possibly be a function, so we stop here.
+      FunctionTop -> bottom -- All bets are off. We lost all information, because
+                            -- this function have any effect.
 
     -- [| var |] = number (nat!) (fin?), given [| value |] is a sequence-coercible type
     transfer _ LengthInstr  {..} = txOverwriteType var (singleType Ty.Number)
@@ -215,19 +162,22 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
     transfer _ ConcatInstr  {..} = txOverwriteType var (singleType Ty.String)
 
     -- Given [| value |] < table, [| var |] = [| value.member |]
-    transfer _ MemberInstr  {..} = \l -> txOverwriteType var (txGetTableMemberType value key l) l
-     where key = Ty.StringKey $ unName member 
-    -- Given [| value |] < table, [| var |] = [| value.index |]
-    -- TODO?: figure out if index is constant and utilise that fact.
-    transfer _ IndexInstr   {..} = txOverwriteType var top
+    transfer _ MemberInstr  {..}
+      = let key = Ty.constantStringType $ unName member
+        in txReadTable var value key
+    -- Given [| value |] < table, [| var |] = [| value[index] |]
+    transfer _ IndexInstr   {..}
+      = let keyIn = txGetType index
+        in \l -> txReadTable var value (keyIn l) l
 
     -- Given [| var |] < table, [| var.member |] = [| value |]
-    transfer _ NewMemberInstr {..} = \l -> let key = Ty.StringKey $ unName member
-                                               val = txGetType value l
-                                            in txSetTableMemberType var key val l
-    -- Given [| var |] < table, [| var.index |] = [| value |]
-    -- TODO?: figure out if index is constant and utilise that fact.
-    transfer _ NewIndexInstr {..} = \l -> txAddUnkownIndexType var (txGetType value l) l
+    transfer _ NewMemberInstr {..}
+      = let key = Ty.constantStringType $ unName member
+        in txWriteTable var value key
+    -- Given [| var |] < table, [| var[index] |] = [| value |]
+    transfer _ NewIndexInstr {..}
+      = let keyIn = txGetType index
+        in \l -> txWriteTable var value (keyIn l) . txNotNil index $ l
 
     -- All given that [| lhs |] and [| rhs |] < number
     transfer _ AddInstr     {..} = numericArithTx var lhs rhs
