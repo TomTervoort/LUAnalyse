@@ -11,3 +11,4 @@ end
 
 c = concat(c, "somestring")
 
+f = d.key
