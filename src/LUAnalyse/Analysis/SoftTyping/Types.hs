@@ -259,8 +259,8 @@ instance Show LuaTypeSet where
         ]
       where
         determine :: Lattice b => Lens a b -> r -> a -> Maybe r
-        determine f desc l
-            | l ^. f </ bottom = Nothing
+        determine f desc ll
+            | ll ^. f </ bottom = Nothing
             | otherwise = Just desc
 
 singleType :: LuaType -> LuaTypeSet
@@ -287,11 +287,13 @@ tableMemberType tab idx
     in vtypes `join` ctypes
   where
     tableKMemberType :: TableType -> ConstantTableKey -> LuaTypeSet
+    tableKMemberType TableBottom _ = bottom
     tableKMemberType tt@(TableType cmap _) kidx
       = let vtype = tableVMemberType tt (vkeyOfCkey kidx)
         in M.findWithDefault vtype kidx cmap
 
     tableVMemberType :: TableType -> VariableTableKey -> LuaTypeSet
+    tableVMemberType TableBottom _ = bottom
     tableVMemberType (TableType cmap vmap) vidx
       = let cmap' = M.mapKeysWith join vkeyOfCkey cmap
             bothMap = M.unionWith join vmap cmap'
@@ -333,6 +335,6 @@ variableTableKeysOf l = S.fromList . catMaybes . map ($ l) $
     ]
   where
     determine :: Lattice b => Lens a b -> r -> a -> Maybe r
-    determine f desc l
-        | l ^. f </ bottom = Nothing
+    determine f desc ll
+        | ll ^. f </ bottom = Nothing
         | otherwise = Just desc

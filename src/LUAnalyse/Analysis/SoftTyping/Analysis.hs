@@ -7,7 +7,7 @@ import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.Framework.Framework
 import LUAnalyse.Framework.Lattice
 import LUAnalyse.Analysis.SoftTyping.Types
-    (LuaType, LuaTypeSet (..), TableType (..)
+    (LuaType, LuaTypeSet (..)
     , FunctionType (..), FunctionEffects (..)
     , singleType)
 import qualified LUAnalyse.Analysis.SoftTyping.Types as Ty
@@ -15,9 +15,7 @@ import qualified LUAnalyse.Analysis.SoftTyping.Types as Ty
 import Utility (outerUnionWith)
 
 import Data.Lens.Common
-import Data.Maybe
 import Control.Arrow
-import Control.Monad hiding (join)
 import qualified Data.Map as M
 
 data SoftTypingAnalysis = SoftTypingAnalysis
@@ -69,6 +67,7 @@ txNotNil var = txConstrainType var (Ty.ltsNil ^= bottom $ top)
 
 txGetType :: Variable -> SoftTypingLattice -> LuaTypeSet
 txGetType var (SoftTypingLattice l) = M.findWithDefault top var l
+txGetType var SoftTypingLatticeTop = bottom
 
 -- | When we know that two variables can only be used in situations where they
 --   have the same type, we need to constrain their type sets by the greatest
@@ -155,6 +154,7 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
       FunctionBottom -> bottom -- The can't possibly be a function, so we stop here.
       FunctionTop -> bottom -- All bets are off. We lost all information, because
                             -- this function have any effect.
+      FunctionType _ _ _ -> error "LUAnalyse.Analysis.SoftTyping#L157"
 
     -- [| var |] = number (nat!) (fin?), given [| value |] is a sequence-coercible type
     transfer _ LengthInstr  {..} = txOverwriteType var (singleType Ty.Number)
