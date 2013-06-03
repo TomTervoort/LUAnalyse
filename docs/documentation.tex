@@ -9,25 +9,86 @@
 \usepackage{url}
 
 \title{Documentation Dataflow And Abstract Interpretation, Automatic Program Analysis}
-\author{Stijn van Drongelen (), Tom Tervoort (), Gerben van Veenendaal (3460692)}
+\author{Stijn van Drongelen (3117537), Tom Tervoort (), Gerben van Veenendaal (3460692)}
 \date{\today}
 
 \begin{document}
 
 \maketitle
 
-\section*{Analysis language}
+\section*{Introduction}
 
-For the assignment, we chose to implement \textit{soft typing} for the programming language LUA. LUA is very popular as a simple scripting language, for example to implement plugins for various programs. We chose LUA because it is a very elegant language, simple, yet powerful.
+For this assignment, we chose to implement \textit{soft typing} for the
+programming language Lua. Lua is very popular as a simple scripting language,
+for example to implement plugins for various programs. We chose Lua because it
+is a very elegant language, simple, yet powerful.
 
-\section*{Implementation language}
+The implementation of this analysis was done in a combination of Lua and
+Haskell. The Lua portion is only responsible for parsing Lua code; we borrowed
+the code from an existing Lua parser by Mark Langen%
+\footnote{\url{https://github.com/stravant/LuaMinify}}.
 
-The implementation language is both LUA and Haskell. We have found a LUA parser at \url{https://github.com/stravant/LuaMinify}
+\section*{Lua's type system}
+
+Ignoring advanced concepts, Lua has only six types:
+
+\begin{itemize}
+\item \texttt{nil} is used to signify nonexistence. For instance, any
+    non-existing variable has the value \texttt{nil}. One peculiarity that
+    illustrates the ``nonexistence'' semantics is that trying to insert
+    a value with index \texttt{nil} into a table leads to an error.
+    We say that \texttt{nil} is of type \textit{nil}.
+\item The \textit{boolean} type is inhabited by \texttt{true} and \texttt{false}.
+\item The \textit{number} type is the set of all possible double-precision
+    floating point numbers.
+\item The \textit{string} type is the set of all sequences of ``characters'',
+    where one character is at least eight bits.%
+    \footnote{More information about Lua strings: \url{http://lua-users.org/wiki/LuaUnicode}}
+\item The \textit{table} type is a mutable mapping from any non-\texttt{nil}
+    value to any non-\texttt{nil} value.\footnote{Any key value that is not
+    explicitly in the table, including \texttt{nil}, maps to \texttt{nil}.}
+\item Lua functions are first-class citizens, so we also need to consider them
+    as inhabitants of the \textit{function} type.
+\end{itemize}
+
+Although Lua's semantics are lenient when it comes to its types, some operations
+can lead to type errors. For example, arithmetic operators only work with numbers,
+table operations fail with anything besides tables, and only functions are callable.
+These properties can be used to approximate which types the variables in
+the program may have if the program won't crash on a type error.
 
 \section*{Analysis}
 
+In our analysis, we keep track of the possible types a variable may have,
+with the assumption that the program will not result in a type error.
+The type lattice we use is product the lattices of the six Lua types, using the
+product order ($(a,b) \leq (a',b') \leftrightarrow a \leq a' \wedge b \leq b'$).
+The precision of these lattices varies greatly:
 
+\begin{itemize}
+\item Because the \textit{nil} and \textit{boolean} types have very few
+    inhabitants, we take the powerset of these as their type lattice,
+    which results in exact precision.
+\item We initially planned to keep track of certain properties of
+    \textit{number}, but we never implemented it, which leaves us with only
+    bottom (may be any number) and top (may be no number).
+\item For \textit{string}, we consider small sets of constants to be between
+    top (all possible strings) and bottom (not a string at all). If the set
+    becomes too large after a join, we replace the result with top.
 
+    Implementing this allowed for a simplification in treating tables.
+    Even when only single string constants are allowed in the lattice,
+    we can treat the notation \texttt{table.member} as \texttt{table["member"]}
+    without any loss of precision.
+\item The lattice for our \textit{table} type is the most intricate in our
+    system. Besides the bottom (not a table) and top (everything may map to
+    anything), we keep track of the values behind (known) constant indices and
+    (unknown) variable indices.
+\item Although our \textit{function} type lattice is relatively complex as it
+    is, keeping track of admissable types of parameters and return values, and
+    effects on global variables, we don't actually use it. Effectively,
+    we only use the bottom and top.
+\end{itemize}
 
 \section*{Strong points}
 
