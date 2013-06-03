@@ -134,7 +134,7 @@ graphRep = foldr (\(n,e) -> M.alter (addEdge e) n) M.empty
 --   direction of the analysis).
 performAnalysis :: forall a l. Analysis a l => a -> Program -> Map InstructionLabel (l, l)
 performAnalysis a p = addExits $ mfp edges' initialState
- where (atype, adir) = analysisKind a
+ where (_atype, adir) = analysisKind a
        trans = transfer a
        edges' = edges p adir
        graph = graphRep edges'

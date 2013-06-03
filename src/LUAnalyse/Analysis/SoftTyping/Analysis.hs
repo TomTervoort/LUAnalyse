@@ -7,7 +7,7 @@ import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.Framework.Framework
 import LUAnalyse.Framework.Lattice
 import LUAnalyse.Analysis.SoftTyping.Types
-    (LuaType, LuaTypeSet (..)
+    ( LuaTypeSet (..)
     , FunctionType (..), FunctionEffects (..)
     , singleType)
 import qualified LUAnalyse.Analysis.SoftTyping.Types as Ty
@@ -20,6 +20,8 @@ import Data.Foldable
 import Data.Lens.Common
 import Control.Arrow
 import qualified Data.Map as M
+
+type TransferFunction = SoftTypingLattice -> SoftTypingLattice
 
 data SoftTypingAnalysis = SoftTypingAnalysis
 data SoftTypingLattice
@@ -56,25 +58,25 @@ instance Lattice SoftTypingLattice where
     top = SoftTypingLatticeTop
     bottom = SoftTypingLattice M.empty
 
-txOverwriteType :: Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
+txOverwriteType :: Variable -> LuaTypeSet -> TransferFunction
 txOverwriteType var types (SoftTypingLattice l) = SoftTypingLattice $ M.insert var types l
 txOverwriteType _ _ SoftTypingLatticeTop = SoftTypingLatticeTop -- TODO It's actually a semi-bound lattice...
 
-txConstrainType :: Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
-txConstrainType var types lat@(SoftTypingLattice l) = SoftTypingLattice $ M.insert var (types `meet` (txGetType var lat)) l
+txConstrainType :: Variable -> LuaTypeSet -> TransferFunction
+txConstrainType var types lat@(SoftTypingLattice l) = SoftTypingLattice $ M.insert var (types `meet` txGetType var lat) l
 txConstrainType _ _ SoftTypingLatticeTop = SoftTypingLatticeTop
 
-txNotNil :: Variable -> SoftTypingLattice -> SoftTypingLattice
+txNotNil :: Variable -> TransferFunction
 txNotNil var = txConstrainType var (Ty.ltsNil ^= bottom $ top)
 
 txGetType :: Variable -> SoftTypingLattice -> LuaTypeSet
 txGetType var (SoftTypingLattice l) = M.findWithDefault top var l
-txGetType var SoftTypingLatticeTop = bottom
+txGetType _ SoftTypingLatticeTop = bottom
 
 -- | When we know that two variables can only be used in situations where they
 --   have the same type, we need to constrain their type sets by the greatest
 --   set they have in common. No coercion is implied.
-txConstrainEqualTypes :: Variable -> Variable -> SoftTypingLattice -> SoftTypingLattice
+txConstrainEqualTypes :: Variable -> Variable -> TransferFunction
 txConstrainEqualTypes lhs rhs l
   = let -- In case we keep track of more precise types, we need to simplify
         -- the type sets, so that the notion of "compatible" types is not
@@ -89,14 +91,14 @@ txConstrainEqualTypes lhs rhs l
 simplifyTypeSet :: LuaTypeSet -> LuaTypeSet
 simplifyTypeSet = id
 
-txReadTable :: Variable -> Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
+txReadTable :: Variable -> Variable -> LuaTypeSet -> TransferFunction
 txReadTable dst tab key l
   = let tableType = txGetType tab l
     in    txOverwriteType dst (Ty.tableMemberType tableType key)
         . txConstrainType tab (singleType $ Ty.Table top)
         $ l
 
-txWriteTable :: Variable -> Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
+txWriteTable :: Variable -> Variable -> LuaTypeSet -> TransferFunction
 txWriteTable src tab key l
   = let tableType = txGetType tab l
         srcType = txGetType src l
@@ -105,7 +107,7 @@ txWriteTable src tab key l
         $ l
 
 -- | Executes the side-effects of a function upon the soft-typing lattice.
-runFunctionEffects :: FunctionEffects -> SoftTypingLattice -> SoftTypingLattice
+runFunctionEffects :: FunctionEffects -> TransferFunction
 runFunctionEffects EffectTop = const bottom
 runFunctionEffects (FunctionEffects effs) = 
  foldr (>>>) id [txConstrainType var before >>> txOverwriteType var after 
@@ -120,17 +122,23 @@ luaConstantType (BooleanConst value) = Ty.constantBooleanType value
 luaConstantType TableConst = singleType $ Ty.Table Ty.emptyTableType
 luaConstantType NilConst = singleType Ty.Nil
 
+assignmentTx :: Variable -> Variable -> TransferFunction
 assignmentTx var value l = txOverwriteType var (txGetType value l) l 
+
+numericArithTx :: Variable -> Variable -> Variable -> TransferFunction
 numericArithTx var lhs rhs
     = txOverwriteType var (singleType Ty.Number)
     . txConstrainType lhs (singleType Ty.Number)
     . txConstrainType rhs (singleType Ty.Number)
+numericArithTxUnary :: Variable -> Variable -> TransferFunction
 numericArithTxUnary var value
     = txOverwriteType var (singleType Ty.Number)
     . txConstrainType value (singleType Ty.Number)
-equalityTestTx var lhs rhs
+equalityTestTx :: Variable -> Variable -> Variable -> TransferFunction
+equalityTestTx var _lhs _rhs
     = txOverwriteType var (singleType Ty.Boolean)
 
+orderingTestTx :: Variable -> Variable -> Variable -> TransferFunction
 orderingTestTx var lhs rhs
     = txOverwriteType var (singleType Ty.Boolean)
     . txConstrainEqualTypes lhs rhs

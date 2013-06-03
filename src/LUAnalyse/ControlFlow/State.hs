@@ -210,7 +210,7 @@ getVariable name = do
 createVariable :: String -> State FlowState Variable
 createVariable name = do
     s <- get
-    let (globals, (thisScope:deeperScopes)) = s ^. stVariables
+    let (globals, thisScope:deeperScopes) = s ^. stVariables
 
     let newVarName = '%' : show (s ^. stVariableCounter)
     let newVar     = Variable newVarName
@@ -224,7 +224,7 @@ createVariable name = do
 getNewVariable :: State FlowState Variable
 getNewVariable = do
     s <- get
-    let (globals, (thisScope:deeperScopes)) = s ^. stVariables
+    let (globals, thisScope:deeperScopes) = s ^. stVariables
 
     let newVarName = '%' : show (s ^. stVariableCounter)
     let newVar     = Variable newVarName

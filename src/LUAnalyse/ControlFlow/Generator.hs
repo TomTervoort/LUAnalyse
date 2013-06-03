@@ -5,7 +5,6 @@ module LUAnalyse.ControlFlow.Generator(generateControlFlow) where
 import Prelude hiding (lookup)
 import Control.Monad.State
 import Data.Lens.Common
-import Data.Map hiding (map, member)
 
 import LUAnalyse.ControlFlow.Flow
 import LUAnalyse.ControlFlow.State
@@ -37,7 +36,7 @@ handleFunction paramNames block = do
         
         startBlock entryBlockRef
         nilVar <- handleConstant NilConst
-        appendInstruction $ AssignInstr {var = retVar, value = nilVar}
+        appendInstruction AssignInstr {var = retVar, value = nilVar}
         handleBlock block
         finishBlock JumpInstr {target = exitBlockRef}
         
@@ -97,8 +96,9 @@ handleReturn exprs = do
                       exprVar <- handleExpr expr
                       var     <- getVariable "%retval"
                       
-                      appendInstruction $ AssignInstr {var = var, value = exprVar}
+                      appendInstruction AssignInstr {var = var, value = exprVar}
         []     -> return ()
+        _      -> error "LUAnalyse.ControlFlow.Generator#L102"
     
     exitBlockReference <- getExitBlockReference
     junkBlockRef <- getBlockReference
@@ -120,14 +120,14 @@ handleBreak = do
 
 -- Handles if.
 handleIf :: Ast.Expr -> Ast.Block -> Maybe Ast.Block -> State FlowState ()
-handleIf condition thenBlock elseBody = case elseBody of
-    Just elseBlock -> do
-        condVar <- handleExpr condition
-        
-        thenBlockRef <- getBlockReference
-        elseBlockRef <- getBlockReference
-        endBlockRef  <- getBlockReference
-        
+handleIf condition thenBlock elseBody = do
+    condVar <- handleExpr condition
+    thenBlockRef <- getBlockReference
+    elseBlockRef <- getBlockReference
+    endBlockRef  <- getBlockReference
+    
+    case elseBody of
+      Just elseBlock -> do
         finishBlock CondJumpInstr {target = thenBlockRef, alternative = elseBlockRef, cond = condVar}
         
         startBlock thenBlockRef
@@ -138,25 +138,16 @@ handleIf condition thenBlock elseBody = case elseBody of
         scoped (handleBlock elseBlock)
         finishBlock JumpInstr {target = endBlockRef}
         
-        startBlock endBlockRef
-        
-        return ()
-        
-    Nothing -> do
-        condVar <- handleExpr condition
-        
-        thenBlockRef <- getBlockReference
-        endBlockRef  <- getBlockReference
-        
+      Nothing -> do
         finishBlock CondJumpInstr {target = thenBlockRef, alternative = endBlockRef, cond = condVar}
         
         startBlock thenBlockRef
         scoped (handleBlock thenBlock)
         finishBlock JumpInstr {target = endBlockRef}
         
-        startBlock endBlockRef
-        
-        return ()
+    startBlock endBlockRef
+    
+    return ()
 
 -- Handles while.
 handleWhile :: Ast.Expr -> Ast.Block -> State FlowState ()
@@ -228,36 +219,33 @@ handleAssignments lhs rhs = do
             assignTempVar var = do
                 tempVar <- getNewVariable
                 
-                appendInstruction $ AssignInstr {var = tempVar, value = var}
+                appendInstruction AssignInstr {var = tempVar, value = var}
                 
                 return tempVar
 
 -- Handles an assignment.
 handleAssignment :: Ast.Expr -> Ast.Expr -> State FlowState Variable
-handleAssignment lhs rhs =
+handleAssignment lhs rhs = do
+    rhsVar <- handleExpr rhs
     case lhs of
         Ast.VarExpr (Ast.Name name) -> do
-            rhsVar <- handleExpr rhs
             var    <- getVariable name
+           
+            appendInstruction AssignInstr {var = var, value = rhsVar}
             
-            appendInstruction $ AssignInstr {var = var, value = rhsVar}
-            
-            return rhsVar
             
         Ast.MemberExpr expr (Ast.Name member) -> do
-            rhsVar  <- handleExpr rhs
             exprVar <- handleExpr expr
             
-            appendInstruction $ NewMemberInstr {var = exprVar, member = Name member, value = rhsVar}
-            return rhsVar
+            appendInstruction NewMemberInstr {var = exprVar, member = Name member, value = rhsVar}
             
         Ast.IndexExpr expr index -> do
-            rhsVar   <- handleExpr rhs
             exprVar  <- handleExpr expr
             indexVar <- handleExpr index
             
-            appendInstruction $ NewIndexInstr {var = exprVar, index = indexVar, value = rhsVar}
-            return rhsVar
+            appendInstruction NewIndexInstr {var = exprVar, index = indexVar, value = rhsVar}
+
+    return rhsVar
 
 -- Handles expressions.
 handleExpr :: Ast.Expr -> State FlowState Variable
@@ -293,13 +281,13 @@ handleExpr expr =
             indexVar <- handleExpr index
             var      <- getNewVariable
             
-            appendInstruction $ IndexInstr {var = var, value = exprVar, index = indexVar}
+            appendInstruction IndexInstr {var = var, value = exprVar, index = indexVar}
             return var
         Ast.MemberExpr expr (Ast.Name member) -> do
             exprVar  <- handleExpr expr
             var      <- getNewVariable
             
-            appendInstruction $ MemberInstr {var = var, value = exprVar, member = Name member}
+            appendInstruction MemberInstr {var = var, value = exprVar, member = Name member}
             return var
         
         -- Calls.
@@ -308,7 +296,7 @@ handleExpr expr =
             argVars   <- mapM handleExpr arguments
             var       <- getNewVariable
             
-            appendInstruction $ CallInstr {var = var, func = methodVar, args = argVars}
+            appendInstruction CallInstr {var = var, func = methodVar, args = argVars}
             return var
         
         -- Closure.
@@ -332,12 +320,12 @@ handleAndOperator first second = do
     -- If so, set to second value.
     startBlock firstBlockRef
     secondVar <- handleExpr second
-    appendInstruction $ AssignInstr {var = var, value = secondVar}
+    appendInstruction AssignInstr {var = var, value = secondVar}
     finishBlock JumpInstr {target = endBlockRef}
     
     -- Otherwise, set to first value.
     startBlock secondBlockRef
-    appendInstruction $ AssignInstr {var = var, value = firstVar}
+    appendInstruction AssignInstr {var = var, value = firstVar}
     finishBlock JumpInstr {target = endBlockRef}
     
     -- Start end block.
@@ -361,12 +349,12 @@ handleOrOperator first second = do
     -- If so, set to second value.
     startBlock firstBlockRef
     secondVar <- handleExpr second
-    appendInstruction $ AssignInstr {var = var, value = secondVar}
+    appendInstruction AssignInstr {var = var, value = secondVar}
     finishBlock JumpInstr {target = endBlockRef}
     
     -- Otherwise, set to first value.
     startBlock secondBlockRef
-    appendInstruction $ AssignInstr {var = var, value = firstVar}
+    appendInstruction AssignInstr {var = var, value = firstVar}
     finishBlock JumpInstr {target = endBlockRef}
     
     -- Start end block.
@@ -400,6 +388,7 @@ handleBinaryOperator first (Ast.Operator op) second = do
                 ">"  -> GreaterInstr   {var = var', lhs = firstExpr, rhs = secondExpr}
                 "<=" -> LessEqInstr    {var = var', lhs = firstExpr, rhs = secondExpr}
                 ">=" -> GreaterEqInstr {var = var', lhs = firstExpr, rhs = secondExpr}
+                _ -> error $ "LUAnalyse.ControlFlow.Generator#L391: " ++ op ++ " is not a valid operator"
 
 -- Handles unary operators.
 handleUnaryOperator :: Ast.Operator -> Ast.Expr -> State FlowState Variable
@@ -414,19 +403,20 @@ handleUnaryOperator (Ast.Operator op) expr = do
                 "-"   -> MinusInstr  {var = var', value = exprVar}
                 "not" -> NotInstr    {var = var', value = exprVar}
                 "#"   -> LengthInstr {var = var', value = exprVar}
+                _ -> error $ "LUAnalyse.ControlFlow.Generator#L406: " ++ op ++ " is not a valid operator"
 
 -- Handles constants.
 handleConstant :: Constant -> State FlowState Variable
 handleConstant constant = do
     var' <- getNewVariable
-    appendInstruction $ ConstInstr {var = var', constant = constant}
+    appendInstruction ConstInstr {var = var', constant = constant}
     return var'
 
 -- Handles table construction.
 handleConstructor :: [(Ast.Expr, Ast.Expr)] -> State FlowState Variable
 handleConstructor pairs = do
     var' <- getNewVariable
-    appendInstruction $ ConstInstr {var = var', constant = TableConst}
+    appendInstruction ConstInstr {var = var', constant = TableConst}
     
     mapM_ (\(key, v) -> handleAssignment (Ast.IndexExpr (varToAstExpr var') key) v) pairs
     

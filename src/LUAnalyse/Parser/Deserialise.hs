@@ -50,7 +50,7 @@ readData inp = dataInp `extB` stringInp                 `extB` numInp
        ty = dataTypeOf (undefined :: r)
        
        stringInp :: String
-       stringInp = unescape $ init $ tail $ inp
+       stringInp = unescape . init . tail $ inp
        
        unescape []          = []
        unescape ('\'':c:cs) = c : unescape cs

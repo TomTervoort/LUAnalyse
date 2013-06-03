@@ -2,12 +2,9 @@ module Utility
     ( outerUnionWith
     ) where
 
-import Data.List (foldl')
-
 import qualified Data.Map as M
-import qualified Data.Set as S
 
-type OuterUnionSide a b = (Maybe a, Maybe b)
+-- type OuterUnionSide a b = (Maybe a, Maybe b)
 
 outerUnionWith :: (Ord k) => (Maybe a -> Maybe b -> r) -> M.Map k a -> M.Map k b -> M.Map k r
 outerUnionWith combine lhs rhs
