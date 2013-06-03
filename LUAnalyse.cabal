@@ -19,3 +19,4 @@ executable LUAnalyse
     data-lens,
     data-lens-template
   hs-source-dirs:   src
+  ghc-options:      -Wall

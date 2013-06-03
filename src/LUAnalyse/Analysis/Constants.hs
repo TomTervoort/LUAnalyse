@@ -48,18 +48,18 @@ instance Lattice AssignmentStatus where
  top = MultipleAssignments
 
 instance Lattice ConstantVars where
- a </ b = 
-  case (a,b) of
+ aa </ bb = 
+  case (aa,bb) of
    (ConstantVars a, ConstantVars b) -> all (\(v, s) -> s </ M.findWithDefault NoAssignments v b) 
                                         $ M.assocs a
    (_             , NoConstantVars) -> True
    (NoConstantVars, ConstantVars _) -> False
- join a b = 
-  case (a,b) of
+ join aa bb = 
+  case (aa,bb) of
    (ConstantVars a, ConstantVars b) -> ConstantVars $ M.unionWith join a b
    (_             , _             ) -> NoConstantVars
- meet a b =
-  case (a,b) of
+ meet aa bb =
+  case (aa,bb) of
    (ConstantVars a, ConstantVars b) -> ConstantVars $ M.intersectionWith meet a b
    (ca            , NoConstantVars) -> ca
    (NoConstantVars, cb            ) -> cb
