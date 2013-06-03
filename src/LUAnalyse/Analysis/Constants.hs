@@ -1,4 +1,5 @@
-{-# LANGUAGE Haskell2010, FunctionalDependencies #-}
+{-# LANGUAGE Haskell2010 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- | Contains a simple analysis that determines which variables in the program have never been 
 --   assigned to after intialization and are therefore constant. This is very useful for functions,

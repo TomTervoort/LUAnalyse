@@ -21,7 +21,6 @@ import Control.Arrow
 import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Set (Set)
 import qualified Data.Set as S
 
 -- | Denotes the direction of analysis: either forward or backwards.
@@ -90,24 +89,22 @@ labelInstructions = functions >>> M.elems >>> map flow >>> M.unions >>> M.assocs
 --   label.
 nextInstructions :: Program -> Maybe InstructionLabel -> [InstructionLabel]
 nextInstructions p Nothing = 
-  concatMap (\func -> nextInstructions p (Just $ InstructionLabel (entry func) (-1))) $ M.elems $ functions p
+  concatMap (\fun -> nextInstructions p (Just $ InstructionLabel (entry fun) (-1))) $ M.elems $ functions p
 nextInstructions p (Just (InstructionLabel ref ind))
-    = case ref `M.lookup` wholeFlow of
-        Nothing -> error "LUAnalyse.Framework#L101"
-        Just (Block ins jump)
+    = case fromMaybe (error "LUAnalyse.Framework#L95") $ ref `M.lookup` wholeFlow of
+        Block ins jump
             | ind < length ins - 1 -> [InstructionLabel ref (ind + 1)]
             | otherwise -> firstIns jump
   where
-    firstIns jump = 
+    firstIns jump =
       case jump of
         JumpInstr x         -> firstIns' x
         CondJumpInstr a b _ -> firstIns' a ++ firstIns' b
         ReturnInstr         -> []
     firstIns' r = 
-      case r `M.lookup` wholeFlow of
-        Nothing -> error "LUAnalyse.Framework#L113"
-        Just (Block [] j) -> firstIns j
-        Just (Block _ _)  -> [InstructionLabel r 0]
+      case fromMaybe (error "LUAnalyse.Framework#L106") $ r `M.lookup` wholeFlow of
+        Block [] j -> firstIns j
+        Block _ _  -> [InstructionLabel r 0]
 
     wholeFlow = M.unions $ map flow $ M.elems $ functions p
 
@@ -142,7 +139,7 @@ performAnalysis a p = addExits $ mfp edges' initialState
        edges' = edges p adir
        graph = graphRep edges'
        instructions = labelInstructions p
-       outgoing l = [(l, l') | l' <- maybe [] id $ l `M.lookup` graph]
+       outgoing l = [(l, l') | l' <- fromMaybe [] $ l `M.lookup` graph]
        extremals = S.fromList $ extremalLabels p adir
        initialVal l | l `S.member` extremals = extremal a
                     | otherwise              = least a
@@ -159,17 +156,17 @@ performAnalysis a p = addExits $ mfp edges' initialState
        mfp ((l,l'):ls) m | not (transferred </ ml') = mfp (outgoing l' ++ ls) 
                                                        $ M.insert l' (combine a ml' transferred) m
                          | otherwise = mfp ls m
-        where transferred = maybe (error "LUAanlyse.Framework#L167") id $ do
+        where transferred = fromMaybe (error "LUAanlyse.Framework#L160") $ do
                 i' <- l `M.lookup` instructions
                 m' <- l `M.lookup` m
                 return $ trans i' m'
-              ml' = maybe (error "LUAanlyse.Framework#L171") id $ l' `M.lookup` m
+              ml' = fromMaybe (error "LUAanlyse.Framework#L164") $ l' `M.lookup` m
 
        -- Performs the transfer function on each label once more to obtain the exit value along 
        -- with the entry value.
        addExits :: Map InstructionLabel l -> Map InstructionLabel (l, l)
        addExits = M.mapWithKey transferral
         where transferral :: InstructionLabel -> l -> (l, l)
-              transferral i l = maybe (error "LUAanlyse.Framework#L178") id $ do
+              transferral i l = fromMaybe (error "LUAanlyse.Framework#L171") $ do
                 i' <- i `M.lookup` instructions
                 return (l, trans i' l)

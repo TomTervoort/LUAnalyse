@@ -29,7 +29,7 @@ main :: IO ()
 main =  do [filename] <- getArgs
            ast <- parseLuaFile filename
            print ast
-           program <- return $ generateControlFlow ast
+           let program = generateControlFlow ast
            putStrLn "\n"
            putStrLn $ formatControlFlow program
            
@@ -48,4 +48,3 @@ main =  do [filename] <- getArgs
 
            -- print $ M.unions $ map flow $ M.elems $ functions program -- $ M.assocs $ M.unions $ map flow $ M.elems $ (functions program) -- 
            -- print $ labelInstructions program
-           return ()

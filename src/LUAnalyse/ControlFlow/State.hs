@@ -5,7 +5,7 @@ module LUAnalyse.ControlFlow.State where
 
 import Prelude hiding (lookup)
 import Control.Monad.State
-import Data.Map hiding (map, member)
+import Data.Map hiding (map, member, mapMaybe)
 import Data.Maybe
 import Data.Lens.Common
 import Data.Lens.Template
@@ -71,7 +71,7 @@ startFunction = do
 
 -- Finishes a function.
 finishFunction :: FlowState -> BlockReference -> BlockReference -> [Variable] -> Variable -> State FlowState FunctionReference
-finishFunction oldState entryBlockRef exitBlockRef params retVar = do
+finishFunction oldState entryBlockRef exitBlockRef parameters retVar = do
     -- Fetch new state.
     newState <- get
     
@@ -80,7 +80,7 @@ finishFunction oldState entryBlockRef exitBlockRef params retVar = do
             { flow = newState ^. stBlocks
             , entry = entryBlockRef
             , exit = exitBlockRef
-            , params = params
+            , params = parameters
             , returnVar = retVar
             }
 
@@ -182,14 +182,14 @@ scoped :: State FlowState a -> State FlowState a
 scoped act = do
     -- Introduce a new scope.
     sBefore <- get
-    let (globals, scoped) = sBefore ^. stVariables 
-    put $ stVariables ^= (globals, empty : scoped) $ sBefore
+    let (globals, locals) = sBefore ^. stVariables 
+    put $ stVariables ^= (globals, empty : locals) $ sBefore
     -- Execute the action.
     result <- act
     -- Drop the introduced scope.
     sAfter <- get
-    let (globals', _ : scoped') = sAfter ^. stVariables 
-    put $ stVariables ^= (globals, scoped) $ sAfter
+    let (globals', _ : locals') = sAfter ^. stVariables 
+    put $ stVariables ^= (globals', locals') $ sAfter
     -- Return the result of the scoped action.
     return result
 
@@ -197,13 +197,13 @@ scoped act = do
 getVariable :: String -> State FlowState Variable
 getVariable name = do
     s <- get
-    let (globals, scoped) = s ^. stVariables
+    let (globals, locals) = s ^. stVariables
 
-    case catMaybes . map (lookup name) $ scoped ++ [globals] of
-        (var:_) -> return var
+    case mapMaybe (lookup name) $ locals ++ [globals] of
+        (v:_) -> return v
         []      -> do
             let newVar = Variable name
-            put $ stVariables ^= (insert name newVar globals, scoped) $ s
+            put $ stVariables ^= (insert name newVar globals, locals) $ s
             return newVar
 
 -- Creates a local variable.
