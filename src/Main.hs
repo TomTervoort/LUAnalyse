@@ -43,7 +43,8 @@ main =  do [filename] <- getArgs
            
            putStrLn "\n--------\n\n"
            
-           let foo = performAnalysis SoftTypingAnalysis program
+           let sta = SoftTypingAnalysis (M.map returnVar $ functions program)
+           let foo = performAnalysis sta program
            forM_ (M.toList foo) $ \(lbl, stls) -> putStrLn $ show lbl ++ ": " ++ show stls
 
            -- print $ M.unions $ map flow $ M.elems $ functions program -- $ M.assocs $ M.unions $ map flow $ M.elems $ (functions program) -- 

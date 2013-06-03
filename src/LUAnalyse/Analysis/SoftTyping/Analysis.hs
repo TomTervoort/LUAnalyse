@@ -24,6 +24,9 @@ import qualified Data.Map as M
 type TransferFunction = SoftTypingLattice -> SoftTypingLattice
 
 data SoftTypingAnalysis = SoftTypingAnalysis
+    -- | This mapping allows the analysis to figure out which variables
+    --   are the return variables of a given function.
+    (M.Map FunctionReference Variable)
 data SoftTypingLattice
     -- | By default, a variable can be of any type (@top :: LuaTypeSet@).
     --   In the bottom, every variable can be of any type, so the map is
@@ -70,7 +73,7 @@ txNotNil :: Variable -> TransferFunction
 txNotNil var = txConstrainType var (Ty.ltsNil ^= bottom $ top)
 
 txGetType :: Variable -> SoftTypingLattice -> LuaTypeSet
-txGetType var (SoftTypingLattice l) = M.findWithDefault top var l
+txGetType var (SoftTypingLattice l) = M.findWithDefault (singleType Ty.Nil) var l
 txGetType _ SoftTypingLatticeTop = bottom
 
 -- | When we know that two variables can only be used in situations where they
@@ -115,6 +118,7 @@ runFunctionEffects (FunctionEffects effs) =
 
 
 luaConstantType :: Constant -> LuaTypeSet
+-- luaConstantType (FunctionConst _ref) = error "LUAnalyse.Analysis.SoftTyping#L121"
 luaConstantType (FunctionConst _ref) = singleType $ Ty.Function top
 luaConstantType (NumberConst _value) = singleType Ty.Number
 luaConstantType (StringConst value) = Ty.constantStringType value
@@ -147,11 +151,18 @@ orderingTestTx var lhs rhs
 
 instance Analysis SoftTypingAnalysis SoftTypingLattice where
     transfer _ AssignInstr  {..} = assignmentTx var value
-    transfer _ ConstInstr   {..} = txOverwriteType var (luaConstantType constant)
+    {-
+    transfer (SoftTypingAnalysis mapping) ConstInstr {constant = FunctionConst ref, ..}
+        | Just retVar <- M.lookup ref mapping
+          = \ll -> let returnType = txGetType retVar ll
+                       ft = FunctionType [] [returnType] top
+                   in txOverwriteType var (singleType $ Ty.Function ft) ll
+    -}
+    transfer _ ConstInstr {..} = txOverwriteType var (luaConstantType constant)
     
     -- [| var |] = [| return-of func |], given [| func |] < function,
     -- and ensure that argument types work, also apply effects
-    transfer _ CallInstr    {..} = \l -> 
+    transfer _ CallInstr {..} = \l -> 
      case txGetType func l ^. Ty.ltsFunction of
       ft@(FunctionType ins [out] effs) | length ins == length args 
        -> -- Constrain arguments with input types; var with output type; run side-effects.
@@ -159,7 +170,7 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
               foldr (>>>) id (zipWith txConstrainType args ins) 
           >>> txConstrainType var out
           >>> runFunctionEffects effs
-          >>> txOverwriteType func (singleType $ Ty.Function ft)
+          >>> txConstrainType func (singleType $ Ty.Function ft)
              $ l
       FunctionBottom -> bottom -- The can't possibly be a function, so we stop here.
       FunctionTop -> bottom -- All bets are off. We lost all information, because

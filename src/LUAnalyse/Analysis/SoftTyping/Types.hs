@@ -1,4 +1,5 @@
 {-# LANGUAGE Haskell2010 #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module LUAnalyse.Analysis.SoftTyping.Types where
@@ -7,7 +8,7 @@ import LUAnalyse.Framework.Lattice
 import qualified LUAnalyse.ControlFlow.Flow as Flow
 
 import Prelude hiding (all, any, concat, foldr)
-import Utility (outerUnionWith)
+import Utility (outerUnionWith, longZipWith)
 
 import Control.DeepSeq
 import Data.Foldable
@@ -273,27 +274,39 @@ unpackedTableTop
 
 -- | Function lattice.
 instance Lattice FunctionType where
- _ </ FunctionTop = True
- FunctionTop </ _ = False
-
  FunctionBottom </ _ = True
  _ </ FunctionBottom = False
+ FunctionTop </ _ = False
+ _ </ FunctionTop = True
 
  FunctionType pIn pOut pEffects </ FunctionType qIn qOut qEffects
     | length pIn <= length qIn, length pOut <= length qOut
-    , all id (zipWith (</) qIn pIn)     -- contravariant
-    , all id (zipWith (</) pOut qOut)   -- covariant
+    , all id (zipWith (</) pIn  pOut)
+    , all id (zipWith (</) pOut qOut)
     , pEffects </ qEffects
     = True
     | otherwise = False
- join p q
-    | p </ q = q
-    | q </ p = p
-    | otherwise = top
- meet p q
-    | p </ q = p
-    | q </ p = q
-    | otherwise = bottom
+
+ join FunctionTop _ = FunctionTop
+ join _ FunctionTop = FunctionTop
+ join FunctionBottom x = x
+ join x FunctionBottom = x
+ FunctionType pIn pOut pEffects `join` FunctionType qIn qOut qEffects
+    = FunctionType
+        (longZipWith join pIn qIn)
+        (longZipWith join pOut qOut)
+        (pEffects `join` qEffects)
+
+ meet FunctionTop x = x
+ meet x FunctionTop = x
+ meet FunctionBottom _ = FunctionBottom
+ meet _ FunctionBottom = FunctionBottom
+ FunctionType pIn pOut pEffects `meet` FunctionType qIn qOut qEffects
+    = FunctionType
+        (longZipWith meet pIn qIn)
+        (longZipWith meet pOut qOut)
+        (pEffects `meet` qEffects)
+
  bottom = FunctionBottom
  top = FunctionTop
 
@@ -360,7 +373,7 @@ instance Show LuaTypeSet where
         , determine ltsNumber   "number"
         , determine2 ltsString
         , determine2 ltsTable
-        , determine ltsFunction "function"
+        , determine2 ltsFunction
         ]
       where
         determine2 :: (Lattice b, Show b) => Lens a b -> a -> Maybe String
@@ -373,11 +386,9 @@ instance Show LuaTypeSet where
             | ll ^. f </ bottom = Nothing
             | otherwise = Just desc
 
-instance Show TableType where
-    show TableTop = "{...}"
-    show TableBottom = "TableBottom"
-    show (TableType cmap vmap)
-      = "{" ++ show cmap ++ " " ++ show vmap ++ "}"
+deriving instance Show FunctionEffects
+deriving instance Show FunctionType
+deriving instance Show TableType
 
 singleType :: LuaType -> LuaTypeSet
 singleType Nil          = ltsNil      ^= top $ bottom

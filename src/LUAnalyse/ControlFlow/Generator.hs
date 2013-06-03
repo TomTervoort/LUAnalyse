@@ -35,8 +35,7 @@ handleFunction paramNames block = do
         params <- mapM (\(Ast.Name name) -> createVariable name) paramNames
         
         startBlock entryBlockRef
-        nilVar <- handleConstant NilConst
-        appendInstruction AssignInstr {var = retVar, value = nilVar}
+        appendInstruction ConstInstr {var = retVar, constant = NilConst}
         handleBlock block
         finishBlock JumpInstr {target = exitBlockRef}
         
@@ -128,28 +127,28 @@ handleIf :: Ast.Expr -> Ast.Block -> Maybe Ast.Block -> State FlowState ()
 handleIf condition thenBlock elseBody = do
     condVar <- handleExpr condition
     thenBlockRef <- getBlockReference
-    elseBlockRef <- getBlockReference
-    endBlockRef  <- getBlockReference
+    (elseBlockRef, endBlockRef) <- case elseBody of
+        Just _ -> do
+            block1 <- getBlockReference
+            block2 <- getBlockReference
+            return (block1, block2)
+        Nothing -> do
+            block0 <- getBlockReference
+            return (block0, block0)
+
+    finishBlock CondJumpInstr {target = thenBlockRef, alternative = elseBlockRef, cond = condVar}
+
+    startBlock thenBlockRef
+    scoped (handleBlock thenBlock)
+    finishBlock JumpInstr {target = endBlockRef}
     
     case elseBody of
       Just elseBlock -> do
-        finishBlock CondJumpInstr {target = thenBlockRef, alternative = elseBlockRef, cond = condVar}
-        
-        startBlock thenBlockRef
-        scoped (handleBlock thenBlock)
-        finishBlock JumpInstr {target = endBlockRef}
-        
         startBlock elseBlockRef
         scoped (handleBlock elseBlock)
         finishBlock JumpInstr {target = endBlockRef}
-        
-      Nothing -> do
-        finishBlock CondJumpInstr {target = thenBlockRef, alternative = endBlockRef, cond = condVar}
-        
-        startBlock thenBlockRef
-        scoped (handleBlock thenBlock)
-        finishBlock JumpInstr {target = endBlockRef}
-        
+      Nothing -> return ()
+
     startBlock endBlockRef
     
     return ()
@@ -229,16 +228,25 @@ handleAssignments lhs rhs = do
                 return tempVar
 
 -- Handles an assignment.
-handleAssignment :: Ast.Expr -> Ast.Expr -> State FlowState Variable
+handleAssignment :: Ast.Expr -> Ast.Expr -> State FlowState ()
+handleAssignment (Ast.VarExpr (Ast.Name name)) rhs = do
+    var' <- getVariable name
+    case rhs of
+        Ast.NumberExpr value ->
+            appendInstruction ConstInstr {var = var', constant = NumberConst value}
+        Ast.StringExpr value ->
+            appendInstruction ConstInstr {var = var', constant = StringConst value}
+        Ast.BooleanExpr value ->
+            appendInstruction ConstInstr {var = var', constant = BooleanConst value}
+        Ast.NilExpr ->
+            appendInstruction ConstInstr {var = var', constant = NilConst}
+        _ -> do
+            rhsVar <- handleExpr rhs
+            appendInstruction AssignInstr {var = var', value = rhsVar}
+    return ()
 handleAssignment lhs rhs = do
     rhsVar <- handleExpr rhs
     case lhs of
-        Ast.VarExpr (Ast.Name name) -> do
-            var    <- getVariable name
-           
-            appendInstruction AssignInstr {var = var, value = rhsVar}
-            
-            
         Ast.MemberExpr expr (Ast.Name member) -> do
             exprVar <- handleExpr expr
             
@@ -250,7 +258,7 @@ handleAssignment lhs rhs = do
             
             appendInstruction NewIndexInstr {var = exprVar, index = indexVar, value = rhsVar}
 
-    return rhsVar
+    return ()
 
 -- Handles expressions.
 handleExpr :: Ast.Expr -> State FlowState Variable
