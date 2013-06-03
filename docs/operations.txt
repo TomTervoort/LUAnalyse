@@ -1,0 +1,115 @@
+http://www.lua.org/manual/5.1/manual.html#2.5
+
+
+Types:
+
+    - nil
+    - boolean
+    - number
+    - string
+    - function
+    - table
+
+    (userdata, thread)
+
+
+
+Arithmetic operators:
+
+    - add (+)
+    - subtract (-)
+    - mul (*)
+    - div (/)
+    - mod (%)
+    - unary minus (-)
+    - power (^)
+
+    If the operands are numbers, or strings that can be converted to numbers
+    (see §2.2.1), then all operations have the usual meaning.
+    Returns a number.
+
+
+
+Relational operators:
+
+    - equal (==)
+    - not equal (~=)
+    - less than (<)
+    - greater than (>)
+    - less or equal (<=)
+    - greater or equal (>=)
+
+    Returns a boolean.
+
+
+
+Logical operators:
+
+    - and (and)
+    - or (or)
+    - negation (not)
+
+    Negation returns a boolean. Others return one of their arguments.
+
+    Like the control structures (see §2.4.4), all logical operators consider both false
+    and nil as false and anything else as true. The negation operator not always returns false or true. 
+    The disjunction operator or returns its first argument if this value is different from nil and false;
+    otherwise, or returns its second argument. Both and and or use short-cut evaluation; that is, the second
+    operand is evaluated only if necessary.
+
+
+
+Concatenation:
+
+    - concat (..)
+
+    Returns a string.
+
+
+The length operator:
+
+    - length (#)
+
+    Returns an integer (number). Only works on strings, tables.
+
+Other operators:
+
+    - call (a())
+
+    Only works on functions. Non-existing arguments will be nil.
+    Variable arguments may apply. May return multiple values.
+
+
+
+    - index (a.b, a[b])
+
+    Non-existing members will be nil.
+
+
+
+    - newindex (a.b = c, a[b] = c, b not in a)
+
+    t[0] and t["0"] denote different entries in a table.
+
+    Keys can be any value? boolean, number, string, function, table. Except nil.
+
+
+
+
+Special values:
+
+    - ... (as an expression)
+    - a, b, _ = ...
+    - {...}
+    - return ...
+
+    Handle like multiple return values? Takes first as an expr.
+    
+    - {x = 1, x = 2, ["x"] = 3} (x = 3)
+    
+
+Variables:
+
+    If present, an initial assignment has the same semantics of a multiple assignment.
+    Otherwise, all variables are initialized with nil.
+
