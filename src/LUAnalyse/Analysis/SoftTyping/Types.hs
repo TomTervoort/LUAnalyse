@@ -128,6 +128,7 @@ data TableType
 
 instance NFData TableType where
     rnf TableBottom = ()
+    rnf TableTop = ()
     rnf (TableType x0 x1) = x0 `deepseq` x1 `deepseq` ()
 
 data ConstantTableKey
@@ -354,15 +355,26 @@ instance Show LuaTypeSet where
         [ determine ltsNil      "nil"
         , determine ltsBoolean  "boolean"
         , determine ltsNumber   "number"
-        , \ll -> Just . show $ ll ^. ltsString  -- determine ltsString   "string"
-        , determine ltsTable    "table"
+        , determine2 ltsString
+        , determine2 ltsTable
         , determine ltsFunction "function"
         ]
       where
+        determine2 :: (Lattice b, Show b) => Lens a b -> a -> Maybe String
+        determine2 f ll
+            | ll ^. f </ bottom = Nothing
+            | otherwise = Just . show $ ll ^. f
+
         determine :: Lattice b => Lens a b -> r -> a -> Maybe r
         determine f desc ll
             | ll ^. f </ bottom = Nothing
             | otherwise = Just desc
+
+instance Show TableType where
+    show TableTop = "{...}"
+    show TableBottom = "TableBottom"
+    show (TableType cmap vmap)
+      = "{" ++ show cmap ++ " " ++ show vmap ++ "}"
 
 singleType :: LuaType -> LuaTypeSet
 singleType Nil          = ltsNil      ^= top $ bottom
@@ -386,7 +398,7 @@ tableMemberType tab idx
   where
     tableKMemberType :: TableType -> ConstantTableKey -> LuaTypeSet
     tableKMemberType TableBottom _ = bottom
-    tableKMemberType TableTop _ = bottom
+    tableKMemberType TableTop _ = top
     tableKMemberType tt@(TableType cmap _) kidx
       = let vtype = tableVMemberType tt (vkeyOfCkey kidx)
         in M.findWithDefault vtype kidx cmap
@@ -407,9 +419,9 @@ constantTableKeysOf lt
             OnlyFalse -> [KBoolean False]
             TrueAndFalse -> [KBoolean False, KBoolean True]
         stringKeys = case lt ^. ltsString of
-            StringConstants x -> x
+            StringConstants x -> S.map KString x
             _ -> S.empty
-    in boolKeys
+    in boolKeys `S.union` stringKeys
 
 advanceTableType :: LuaTypeSet -> LuaTypeSet -> LuaTypeSet -> LuaTypeSet
 advanceTableType tab idx val
@@ -419,12 +431,14 @@ advanceTableType tab idx val
         advance = foldr (.) id cfuns . foldr (.) id vfuns
 
         advanceC :: ConstantTableKey -> TableType -> TableType
+        advanceC k TableTop = advanceC k unpackedTableTop
         advanceC _ TableBottom = TableBottom
         advanceC k (TableType cmap vmap)
           = let cmap' = M.insert k val cmap
             in TableType cmap' vmap
 
         advanceV :: VariableTableKey -> TableType -> TableType
+        advanceV k TableTop = advanceV k unpackedTableTop
         advanceV _ TableBottom = TableBottom
         advanceV k (TableType cmap vmap)
           = let vmap' = M.insert k val vmap

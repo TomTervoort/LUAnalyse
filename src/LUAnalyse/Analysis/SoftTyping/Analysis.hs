@@ -90,17 +90,17 @@ simplifyTypeSet :: LuaTypeSet -> LuaTypeSet
 simplifyTypeSet = id
 
 txReadTable :: Variable -> Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
-txReadTable var tab key l
+txReadTable dst tab key l
   = let tableType = txGetType tab l
-    in    txOverwriteType var (Ty.tableMemberType tableType key)
+    in    txOverwriteType dst (Ty.tableMemberType tableType key)
         . txConstrainType tab (singleType $ Ty.Table top)
         $ l
 
 txWriteTable :: Variable -> Variable -> LuaTypeSet -> SoftTypingLattice -> SoftTypingLattice
-txWriteTable var tab key l
+txWriteTable src tab key l
   = let tableType = txGetType tab l
-        varType = txGetType var l
-    in    txOverwriteType tab (Ty.advanceTableType tableType key varType)
+        srcType = txGetType src l
+    in    txOverwriteType tab (Ty.advanceTableType tableType key srcType)
         . txConstrainType tab (singleType $ Ty.Table top)
         $ l
 
@@ -175,11 +175,11 @@ instance Analysis SoftTypingAnalysis SoftTypingLattice where
     -- Given [| var |] < table, [| var.member |] = [| value |]
     transfer _ NewMemberInstr {..}
       = let key = Ty.constantStringType $ unName member
-        in txWriteTable var value key
+        in txWriteTable value var key
     -- Given [| var |] < table, [| var[index] |] = [| value |]
     transfer _ NewIndexInstr {..}
       = let keyIn = txGetType index
-        in \l -> txWriteTable var value (keyIn l) . txNotNil index $ l
+        in \l -> txWriteTable value var (keyIn l) . txNotNil index $ l
 
     -- All given that [| lhs |] and [| rhs |] < number
     transfer _ AddInstr     {..} = numericArithTx var lhs rhs
