@@ -301,7 +301,25 @@ constantTableKeysOf :: LuaTypeSet -> S.Set ConstantTableKey
 constantTableKeysOf _ = S.empty
 
 advanceTableType :: LuaTypeSet -> LuaTypeSet -> LuaTypeSet -> LuaTypeSet
-advanceTableType tab idx val = singleType (Table top) -- TODO be more precise!
+advanceTableType tab idx val
+  = let cfuns = fmap advanceC . S.toList . constantTableKeysOf $ idx
+        vfuns = fmap advanceV . S.toList . variableTableKeysOf $ idx
+
+        advance = foldr (.) id cfuns . foldr (.) id vfuns
+
+        advanceC :: ConstantTableKey -> TableType -> TableType
+        advanceC _ TableBottom = TableBottom
+        advanceC k (TableType cmap vmap)
+          = let cmap' = M.insert k val cmap
+            in TableType cmap' vmap
+
+        advanceV :: VariableTableKey -> TableType -> TableType
+        advanceV _ TableBottom = TableBottom
+        advanceV k (TableType cmap vmap)
+          = let vmap' = M.insert k val vmap
+            in TableType cmap vmap'
+
+    in ltsTable ^%= advance $ tab
 
 -- TODO Restructure this, so that variable keys are not build when we only have
 --      constant keys in the type set.
