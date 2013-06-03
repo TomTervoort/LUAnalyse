@@ -17,5 +17,7 @@ executable LUAnalyse
     syb ==0.4.*,
     mtl ==2.1.*,
     data-lens,
-    data-lens-template
+    data-lens-template,
+    deepseq >= 1.2
   hs-source-dirs:   src
+  ghc-options:      -Wall -auto-all
